@@ -1,14 +1,15 @@
 TILE_SIZE = 48          # pixels per tile
-GRID_COLS = 25
-GRID_ROWS = 21
-WINDOW_W = TILE_SIZE * GRID_COLS   # 1200
-WINDOW_H = TILE_SIZE * GRID_ROWS   # 1008
+GRID_COLS = 29
+GRID_ROWS = 25
+WINDOW_W = 1200         # fixed screen resolution, independent of map size
+WINDOW_H = 900
 WINDOW_TITLE = "Explosion Boy"
 
 TARGET_FPS = 60
 TICK_RATE = 20          # server authoritative ticks per second
+INPUT_LEAD_TICKS = 3    # client tick counter runs this many ticks ahead of server
 DEFAULT_PORT = 9000
-MAX_PLAYERS = 12
+MAX_PLAYERS = 16
 
 BOMB_FUSE_TICKS = 60            # 3 seconds at 20 tps
 DEFAULT_BLAST_RADIUS = 2
@@ -22,11 +23,13 @@ PUSH_IMPULSE = 250.0            # impulse transferred to bomb on contact
 BOMB_FRICTION = 3.0
 PLAYER_DAMPING = 0.25           # pymunk body velocity damping factor
 
-# 12 spawn points on a 25×21 grid — ordered so N-player games use first N
+# 16 spawn points on a 29×25 grid — ordered so N-player games use first N.
+# No spawn lands on a pillar (pillars are at even-col AND even-row).
 SPAWN_POINTS: list[tuple[int, int]] = [
-    (1, 1),   (23, 1),   (1, 19),  (23, 19),   # corners
-    (12, 1),  (12, 19),  (1, 10),  (23, 10),   # mid-edges
-    (6, 5),   (18, 5),   (6, 15),  (18, 15),   # inner ring
+    (1,   1),  (27,  1),  (1,  23),  (27, 23),   # corners
+    (14,  1),  (14, 23),  (1,  12),  (27, 12),   # mid-edges
+    (7,   6),  (21,  6),  (7,  18),  (21, 18),   # inner ring 1
+    (7,  12),  (21, 12),  (14,  7),  (14, 17),   # inner ring 2
 ]
 
 PLAYER_COLOURS = [
@@ -42,4 +45,8 @@ PLAYER_COLOURS = [
     (150, 150, 150, 255),   # grey
     (80,  160, 100, 255),   # teal
     (200, 200, 80,  255),   # lime
+    (220, 50,  150, 255),   # magenta
+    (50,  160, 240, 255),   # sky blue
+    (180, 120, 60,  255),   # tan
+    (120, 60,  180, 255),   # violet
 ]

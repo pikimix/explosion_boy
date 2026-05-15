@@ -16,7 +16,7 @@ import struct
 from collections import deque
 from uuid import UUID, uuid4
 
-from platform.transport import (
+from engine.transport import (
     CHANNEL_RELIABLE,
     CHANNEL_UNRELIABLE,
     ConnectEvent,
@@ -106,7 +106,7 @@ class _Peer:
 
 class TCPServerTransport:
     def __init__(self, host: str = "0.0.0.0", port: int = 9000,
-                 max_clients: int = 12) -> None:
+                 max_clients: int = 16) -> None:
         self._max_clients = max_clients
         self._peers: dict[UUID, _Peer] = {}
         self._listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

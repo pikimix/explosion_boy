@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pymunk
 
-from platform.config import (
+from engine.config import (
     BOMB_FRICTION,
     BOMB_HALF_SIZE,
     PLAYER_DAMPING,
@@ -29,6 +29,7 @@ class PhysicsSpace:
         self._player_bodies: dict[int, tuple[pymunk.Body, pymunk.Shape]] = {}
         self._bomb_bodies: dict[int, tuple[pymunk.Body, pymunk.Shape]] = {}
         self._static_shapes: list[pymunk.Shape] = []
+        self._tiles: list[list[int]] = []
 
         # Collision handler: player (type 1) pushes bomb (type 2)
         handler = self._space.add_collision_handler(1, 2)
@@ -37,43 +38,32 @@ class PhysicsSpace:
     # ── Tile walls ────────────────────────────────────────────────────────────
 
     def rebuild_static_walls(self, tiles: list[list[int]]) -> None:
-        """Replace all static segment shapes from the tile grid.
-        Tiles with value == 0 (EMPTY) have no physics body.
-        """
         for shape in self._static_shapes:
             self._space.remove(shape)
         self._static_shapes.clear()
+        self._tiles = tiles
 
         body = self._space.static_body
         rows = len(tiles)
         cols = len(tiles[0]) if rows else 0
-
         for row in range(rows):
             for col in range(cols):
                 if tiles[row][col] == _PASSABLE_TILE:
                     continue
                 x = col * TILE_SIZE
                 y = row * TILE_SIZE
-                corners = [
-                    (x, y), (x + TILE_SIZE, y),
-                    (x + TILE_SIZE, y + TILE_SIZE), (x, y + TILE_SIZE),
-                ]
-                for i in range(4):
-                    seg = pymunk.Segment(
-                        body, corners[i], corners[(i + 1) % 4], 0
-                    )
-                    seg.elasticity = 0.0
-                    seg.friction = 1.0
-                    self._space.add(seg)
-                    self._static_shapes.append(seg)
+                verts = [(x, y), (x + TILE_SIZE, y),
+                         (x + TILE_SIZE, y + TILE_SIZE), (x, y + TILE_SIZE)]
+                shape = pymunk.Poly(body, verts)
+                shape.elasticity = 0.0
+                shape.friction = 0.0
+                self._space.add(shape)
+                self._static_shapes.append(shape)
 
     # ── Players ───────────────────────────────────────────────────────────────
 
     def add_player(self, player_id: int, px: float, py: float) -> None:
-        body = pymunk.Body(
-            mass=1,
-            moment=pymunk.moment_for_circle(1, 0, PLAYER_RADIUS),
-        )
+        body = pymunk.Body(mass=1, moment=float('inf'))  # no rotation
         body.position = (px, py)
         shape = pymunk.Circle(body, PLAYER_RADIUS)
         shape.elasticity = 0.0
@@ -142,6 +132,55 @@ class PhysicsSpace:
 
     def step(self, dt: float) -> None:
         self._space.step(dt)
+        if self._tiles:
+            self._correct_player_positions()
+
+    def _correct_player_positions(self) -> None:
+        """Push players out of any solid tile they overlap and cancel velocity into walls."""
+        tiles = self._tiles
+        rows = len(tiles)
+        cols = len(tiles[0]) if rows else 0
+        r = PLAYER_RADIUS
+
+        for body, _ in self._player_bodies.values():
+            x, y = body.position.x, body.position.y
+            vx, vy = body.velocity.x, body.velocity.y
+
+            col0 = max(0, int((x - r) // TILE_SIZE))
+            col1 = min(cols - 1, int((x + r) // TILE_SIZE))
+            row0 = max(0, int((y - r) // TILE_SIZE))
+            row1 = min(rows - 1, int((y + r) // TILE_SIZE))
+
+            for tr in range(row0, row1 + 1):
+                for tc in range(col0, col1 + 1):
+                    if tiles[tr][tc] == _PASSABLE_TILE:
+                        continue
+                    tx = tc * TILE_SIZE
+                    ty = tr * TILE_SIZE
+                    # Nearest point on tile AABB to circle centre
+                    cx = max(tx, min(x, tx + TILE_SIZE))
+                    cy = max(ty, min(y, ty + TILE_SIZE))
+                    dx, dy = x - cx, y - cy
+                    dist_sq = dx * dx + dy * dy
+                    if dist_sq >= r * r:
+                        continue
+                    dist = dist_sq ** 0.5
+                    if dist < 1e-6:
+                        nx, ny = 1.0, 0.0
+                    else:
+                        nx, ny = dx / dist, dy / dist
+                    # Push out with a small gap
+                    overlap = r - dist
+                    x += nx * (overlap + 0.5)
+                    y += ny * (overlap + 0.5)
+                    # Cancel velocity component into this wall
+                    dot = vx * nx + vy * ny
+                    if dot < 0:
+                        vx -= nx * dot
+                        vy -= ny * dot
+
+            body.position = (x, y)
+            body.velocity = (vx, vy)
 
     # ── Collision callbacks ───────────────────────────────────────────────────
 
