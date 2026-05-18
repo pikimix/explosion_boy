@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """Start the authoritative game server."""
 import argparse
+import os
 
 from net.server import GameServer
 from engine.config import DEFAULT_PORT, MAX_PLAYERS
@@ -9,9 +10,9 @@ from engine.transport import make_server_transport
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Explosion Boy server")
-    parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
-    parser.add_argument("--backend", default="tcp",
+    parser.add_argument("--host", default=os.environ.get("SERVER_HOST", "0.0.0.0"))
+    parser.add_argument("--port", type=int, default=int(os.environ.get("SERVER_PORT", DEFAULT_PORT)))
+    parser.add_argument("--backend", default=os.environ.get("SERVER_BACKEND", "tcp"),
                         help="Transport backend (default: tcp)")
     args = parser.parse_args()
 
