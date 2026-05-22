@@ -63,6 +63,29 @@ uv run python run_client.py --host 192.168.1.10 --port 9000 --name Alice
 5. Collect powerups dropped from destroyed blocks (extra bombs or increased blast radius).
 6. Last player standing wins. The server then resets to the lobby for another round.
 
+## Customisation
+
+### Colours
+
+You can override the colours of tiles, bombs, explosions, powerups, and players without editing the tracked source files.
+
+Copy the example file to the project root:
+
+```bash
+cp example.colours.py colours.py
+```
+
+Then open `colours.py` and uncomment any values you want to change, for example:
+
+```python
+SOFT_BLOCK_COLOUR = (80, 120, 60, 255)   # olive green instead of brown
+EXPLOSION_COLOUR  = (255, 50,  50, 200)  # red explosions
+```
+
+All colours are `(R, G, B, A)` tuples with values 0–255. The alpha channel controls transparency — use 255 for fully opaque.
+
+`colours.py` is gitignored so your changes stay local. See [example.colours.py](example.colours.py) for the full list of available constants and their defaults.
+
 ## Running the Server in Docker
 
 ### Using Docker Compose (recommended)

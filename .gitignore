@@ -8,3 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Local config overrides (not for version control — see example.colours.py / example.env)
+colours.py
+.env

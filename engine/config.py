@@ -32,6 +32,23 @@ SPAWN_POINTS: list[tuple[int, int]] = [
     (7,  12),  (21, 12),  (14,  7),  (14, 17),   # inner ring 2
 ]
 
+# ── Rendering colours ─────────────────────────────────────────────────────────
+# All colours are (R, G, B, A) tuples with values 0–255.
+
+SOLID_WALL_COLOUR:  tuple[int, int, int, int] = (64,  64,  64,  255)   # dark grey
+SOFT_BLOCK_COLOUR:  tuple[int, int, int, int] = (139, 69,  19,  255)   # saddle brown
+EMPTY_TILE_COLOUR:  tuple[int, int, int, int] = (211, 211, 211, 255)   # light grey
+
+EXPLOSION_COLOUR:   tuple[int, int, int, int] = (255, 180, 0,   200)
+BOMB_BASE_COLOUR:   tuple[int, int, int, int] = (30,  30,  30,  255)
+BOMB_PULSE_COLOUR:  tuple[int, int, int, int] = (255, 220, 0,   255)
+
+# Keyed by PowerupKind value (1 = extra bomb, 2 = blast up)
+POWERUP_COLOURS: dict[int, tuple[int, int, int, int]] = {
+    1: (255, 215, 0,   255),   # gold
+    2: (255, 69,  0,   255),   # orange-red
+}
+
 PLAYER_COLOURS = [
     (220, 50,  50,  255),   # red
     (50,  120, 220, 255),   # blue
@@ -50,3 +67,12 @@ PLAYER_COLOURS = [
     (180, 120, 60,  255),   # tan
     (120, 60,  180, 255),   # violet
 ]
+
+# ── Local colour overrides ─────────────────────────────────────────────────────
+# If a colours.py file exists at the project root it is loaded here, letting
+# you override any colour constant above without touching this file.
+# colours.py is gitignored — see example.colours.py for available options.
+try:
+    from colours import *  # noqa: F401, F403
+except ImportError:
+    pass

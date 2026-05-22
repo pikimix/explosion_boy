@@ -17,18 +17,17 @@ import arcade.camera
 from app.ui import hud, volume_widget
 from core.components import TileKind
 from core.state import GameState
-from engine.config import BOMB_FUSE_TICKS, GRID_COLS, GRID_ROWS, PLAYER_COLOURS, TILE_SIZE, WINDOW_H, WINDOW_W
+from engine.config import (
+    BOMB_BASE_COLOUR, BOMB_FUSE_TICKS, BOMB_PULSE_COLOUR, EMPTY_TILE_COLOUR,
+    EXPLOSION_COLOUR, GRID_COLS, GRID_ROWS, PLAYER_COLOURS, POWERUP_COLOURS,
+    SOFT_BLOCK_COLOUR, SOLID_WALL_COLOUR, TILE_SIZE, WINDOW_H, WINDOW_W,
+)
 
 _TILE_COLOURS = {
-    TileKind.SOLID_WALL: arcade.color.DARK_GRAY,
-    TileKind.SOFT_BLOCK: arcade.color.SADDLE_BROWN,
-    TileKind.EMPTY:      arcade.color.LIGHT_GRAY,
+    TileKind.SOLID_WALL: SOLID_WALL_COLOUR,
+    TileKind.SOFT_BLOCK: SOFT_BLOCK_COLOUR,
+    TileKind.EMPTY:      EMPTY_TILE_COLOUR,
 }
-
-_EXPLOSION_COLOUR  = (255, 180, 0, 200)
-_BOMB_BASE         = (30, 30, 30)
-_BOMB_PULSE        = (255, 220, 0)
-_POWERUP_COLOURS   = {1: arcade.color.GOLD, 2: arcade.color.ORANGE_RED}
 
 
 class GameView:
@@ -102,9 +101,9 @@ class GameView:
             freq = 1.0 + (1.0 - fuse_ratio) * 5.0
             # -cos so each bomb always starts dark (0) and immediately rises
             pulse = (-math.cos(2 * math.pi * freq * elapsed) + 1) * 0.5
-            r = int(_BOMB_BASE[0] + pulse * (_BOMB_PULSE[0] - _BOMB_BASE[0]))
-            g = int(_BOMB_BASE[1] + pulse * (_BOMB_PULSE[1] - _BOMB_BASE[1]))
-            b = int(_BOMB_BASE[2] + pulse * (_BOMB_PULSE[2] - _BOMB_BASE[2]))
+            r = int(BOMB_BASE_COLOUR[0] + pulse * (BOMB_PULSE_COLOUR[0] - BOMB_BASE_COLOUR[0]))
+            g = int(BOMB_BASE_COLOUR[1] + pulse * (BOMB_PULSE_COLOUR[1] - BOMB_BASE_COLOUR[1]))
+            b = int(BOMB_BASE_COLOUR[2] + pulse * (BOMB_PULSE_COLOUR[2] - BOMB_BASE_COLOUR[2]))
             arcade.draw_circle_filled(bomb.px, bomb.py, TILE_SIZE * 0.35, (r, g, b, 255))
         for key in list(self._bomb_start_times):
             if key not in active_keys:
@@ -115,20 +114,20 @@ class GameView:
             cx = exp.col * TILE_SIZE + TILE_SIZE / 2
             cy = exp.row * TILE_SIZE + TILE_SIZE / 2
             arcade.draw_rect_filled(arcade.XYWH(cx, cy, TILE_SIZE, TILE_SIZE),
-                                    _EXPLOSION_COLOUR)
+                                    EXPLOSION_COLOUR)
         for ray in state.explosion_rays:
             dc, dr = ray.direction
             for i in range(1, ray.length + 1):
                 cx = (ray.origin_col + dc * i) * TILE_SIZE + TILE_SIZE / 2
                 cy = (ray.origin_row + dr * i) * TILE_SIZE + TILE_SIZE / 2
                 arcade.draw_rect_filled(arcade.XYWH(cx, cy, TILE_SIZE, TILE_SIZE),
-                                        _EXPLOSION_COLOUR)
+                                        EXPLOSION_COLOUR)
 
     def _draw_powerups(self, state: GameState) -> None:
         for pup in state.powerups:
             cx = pup.col * TILE_SIZE + TILE_SIZE / 2
             cy = pup.row * TILE_SIZE + TILE_SIZE / 2
-            colour = _POWERUP_COLOURS.get(int(pup.kind), arcade.color.WHITE)
+            colour = POWERUP_COLOURS.get(int(pup.kind), (255, 255, 255, 255))
             arcade.draw_circle_filled(cx, cy, TILE_SIZE * 0.25, colour)
 
     def _draw_players(
