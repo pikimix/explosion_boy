@@ -4,7 +4,9 @@ from __future__ import annotations
 import arcade
 
 from app.game_view import GameView
+from app.sound_system import SoundSystem
 from core.components import PlayerInput
+from core.state import GameState
 from net.client import GameClient
 from net.protocol import GameOverMsg, InputMsg
 from engine.config import INPUT_LEAD_TICKS, TICK_RATE
@@ -19,6 +21,9 @@ class GameScene:
         self._scene_manager = scene_manager
         self._player_name = player_name
         self._view = GameView()
+        self._sounds = SoundSystem(client.player_id)
+        self._prev_state: GameState | None = None
+        self._last_sound_tick: int = -1
         self._prediction: PredictionEngine | None = None
         self._tick_accum = 0.0
         self._keys: set[int] = set()
@@ -41,10 +46,14 @@ class GameScene:
                 )
                 return
 
-        # Reconcile prediction with latest server state
+        # Reconcile prediction with latest server state; trigger sounds on new ticks
         state = self._client.get_state()
         if state and self._prediction:
             self._prediction.reconcile(state)
+        if state and state.tick > self._last_sound_tick:
+            self._sounds.update(self._prev_state, state)
+            self._prev_state = state
+            self._last_sound_tick = state.tick
 
         # Generate and send input at tick rate
         self._tick_accum += dt
