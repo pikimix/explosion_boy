@@ -9,7 +9,7 @@ from engine.config import TARGET_FPS, WINDOW_H, WINDOW_TITLE, WINDOW_W
 class GameWindow(arcade.Window):
     def __init__(self) -> None:
         super().__init__(WINDOW_W, WINDOW_H, WINDOW_TITLE,
-                         update_rate=1 / TARGET_FPS)
+                         update_rate=1 / TARGET_FPS, resizable=True)
         self._scene_manager: "SceneManager | None" = None  # set after import
 
     def set_scene_manager(self, manager: "SceneManager") -> None:  # type: ignore[name-defined]
@@ -31,3 +31,8 @@ class GameWindow(arcade.Window):
     def on_key_release(self, key: int, modifiers: int) -> None:
         if self._scene_manager:
             self._scene_manager.on_key_release(key, modifiers)
+
+    def on_resize(self, width: int, height: int) -> None:
+        super().on_resize(width, height)
+        if self._scene_manager:
+            self._scene_manager.on_resize(width, height)

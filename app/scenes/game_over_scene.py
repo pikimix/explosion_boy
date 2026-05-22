@@ -5,7 +5,6 @@ import arcade
 import arcade.gui
 
 from net.protocol import GameOverMsg
-from engine.config import WINDOW_H, WINDOW_W
 
 
 class GameOverScene:
@@ -57,9 +56,10 @@ class GameOverScene:
             headline = f"{self._result.winner_name} wins!"
         else:
             headline = "Draw!"
+        win = arcade.get_window()
         arcade.draw_text(
             headline,
-            WINDOW_W / 2, WINDOW_H / 2 + 100,
+            win.width / 2, win.height / 2 + 100,
             arcade.color.WHITE, font_size=40, bold=True,
             anchor_x="center",
         )

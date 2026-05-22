@@ -36,12 +36,15 @@ class GameView:
         self._tile_list: arcade.shape_list.ShapeElementList | None = None
         self._last_tiles: list[list[TileKind]] | None = None
         self._bomb_start_times: dict[tuple[int, int], float] = {}
-        map_w = GRID_COLS * TILE_SIZE
-        map_h = GRID_ROWS * TILE_SIZE
+        self._map_w = GRID_COLS * TILE_SIZE
+        self._map_h = GRID_ROWS * TILE_SIZE
         self._camera = arcade.camera.Camera2D(
-            position=(map_w / 2, map_h / 2),
-            zoom=min(WINDOW_W / map_w, WINDOW_H / map_h),
+            position=(self._map_w / 2, self._map_h / 2),
+            zoom=min(WINDOW_W / self._map_w, WINDOW_H / self._map_h),
         )
+
+    def on_resize(self, width: int, height: int) -> None:
+        self._camera.zoom = min(width / self._map_w, height / self._map_h)
 
     def draw(
         self,

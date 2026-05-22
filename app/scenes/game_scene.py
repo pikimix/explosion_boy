@@ -81,6 +81,9 @@ class GameScene:
     def on_key_release(self, key: int, modifiers: int) -> None:
         self._keys.discard(key)
 
+    def on_resize(self, width: int, height: int) -> None:
+        self._view.on_resize(width, height)
+
     def _send_input(self, tick: int) -> None:
         pid = self._client.player_id
         if pid is None:

@@ -43,3 +43,9 @@ class SceneManager:
     def on_key_release(self, key: int, modifiers: int) -> None:
         if self._stack:
             self._stack[-1].on_key_release(key, modifiers)
+
+    def on_resize(self, width: int, height: int) -> None:
+        if self._stack:
+            scene = self._stack[-1]
+            if hasattr(scene, 'on_resize'):
+                scene.on_resize(width, height)

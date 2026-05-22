@@ -4,26 +4,29 @@ from __future__ import annotations
 import arcade
 
 from core.state import GameState
-from engine.config import MAX_PLAYERS, PLAYER_COLOURS, WINDOW_H, WINDOW_W
+from engine.config import MAX_PLAYERS, PLAYER_COLOURS
 
 _HALF = MAX_PLAYERS // 2  # 8 per edge
 
-# Precompute (x, y, anchor_x, anchor_y) for all MAX_PLAYERS slots.
-# Players 0.._HALF-1 → top edge; _HALF..MAX_PLAYERS-1 → bottom edge.
-_HUD_POSITIONS: list[tuple[float, float, str, str]] = []
-for _i in range(_HALF):
-    _x = 10.0 + (WINDOW_W - 20) * _i / (_HALF - 1)
-    _ax = "left" if _i == 0 else ("right" if _i == _HALF - 1 else "center")
-    _HUD_POSITIONS.append((_x, WINDOW_H - 10, _ax, "top"))
-for _i in range(_HALF):
-    _x = 10.0 + (WINDOW_W - 20) * _i / (_HALF - 1)
-    _ax = "left" if _i == 0 else ("right" if _i == _HALF - 1 else "center")
-    _HUD_POSITIONS.append((_x, 10.0, _ax, "bottom"))
+
+def _hud_positions(w: float, h: float) -> list[tuple[float, float, str, str]]:
+    positions: list[tuple[float, float, str, str]] = []
+    for i in range(_HALF):
+        x = 10.0 + (w - 20) * i / (_HALF - 1)
+        ax = "left" if i == 0 else ("right" if i == _HALF - 1 else "center")
+        positions.append((x, h - 10, ax, "top"))
+    for i in range(_HALF):
+        x = 10.0 + (w - 20) * i / (_HALF - 1)
+        ax = "left" if i == 0 else ("right" if i == _HALF - 1 else "center")
+        positions.append((x, 10.0, ax, "bottom"))
+    return positions
 
 
 def draw(state: GameState) -> None:
+    win = arcade.get_window()
+    positions = _hud_positions(win.width, win.height)
     for pid, stats in state.players.items():
-        x, y, anchor_x, anchor_y = _HUD_POSITIONS[pid % len(_HUD_POSITIONS)]
+        x, y, anchor_x, anchor_y = positions[pid % len(positions)]
         colour = PLAYER_COLOURS[pid % len(PLAYER_COLOURS)]
         label = (
             f"P{pid + 1}  \U0001f4a3 {stats.bomb_capacity - stats.bombs_in_use}"
