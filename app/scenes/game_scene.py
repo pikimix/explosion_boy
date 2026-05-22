@@ -16,12 +16,13 @@ from systems.prediction import PredictionEngine
 class GameScene:
     def __init__(self, client: GameClient,
                  scene_manager: "SceneManager",  # type: ignore[name-defined]
-                 player_name: str = "Player") -> None:
+                 player_name: str = "Player",
+                 volume: float = 1.0) -> None:
         self._client = client
         self._scene_manager = scene_manager
         self._player_name = player_name
         self._view = GameView()
-        self._sounds = SoundSystem(client.player_id)
+        self._sounds = SoundSystem(client.player_id, volume=volume)
         self._prev_state: GameState | None = None
         self._last_sound_tick: int = -1
         self._prediction: PredictionEngine | None = None
@@ -73,10 +74,15 @@ class GameScene:
             local_player_id=self._client.player_id,
             predicted_x=pred.predicted_x if pred else None,
             predicted_y=pred.predicted_y if pred else None,
+            volume=self._sounds.volume,
         )
 
     def on_key_press(self, key: int, modifiers: int) -> None:
         self._keys.add(key)
+        if key == arcade.key.BRACKETLEFT:
+            self._sounds.volume = round(self._sounds.volume - 0.1, 1)
+        elif key == arcade.key.BRACKETRIGHT:
+            self._sounds.volume = round(self._sounds.volume + 0.1, 1)
 
     def on_key_release(self, key: int, modifiers: int) -> None:
         self._keys.discard(key)

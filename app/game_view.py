@@ -14,7 +14,7 @@ import arcade
 
 import arcade.camera
 
-from app.ui import hud
+from app.ui import hud, volume_widget
 from core.components import TileKind
 from core.state import GameState
 from engine.config import BOMB_FUSE_TICKS, GRID_COLS, GRID_ROWS, PLAYER_COLOURS, TILE_SIZE, WINDOW_H, WINDOW_W
@@ -52,6 +52,7 @@ class GameView:
         local_player_id: int | None = None,
         predicted_x: float | None = None,
         predicted_y: float | None = None,
+        volume: float = 1.0,
     ) -> None:
         with self._camera.activate():
             self._draw_tiles(state)
@@ -60,6 +61,7 @@ class GameView:
             self._draw_explosions(state)
             self._draw_players(state, local_player_id, predicted_x, predicted_y)
         hud.draw(state)
+        self._draw_volume(volume)
 
     # ── Tiles ─────────────────────────────────────────────────────────────────
 
@@ -141,3 +143,6 @@ class GameView:
             y = pred_y if (pid == local_id and pred_y is not None) else phys.y
             colour = PLAYER_COLOURS[pid % len(PLAYER_COLOURS)]
             arcade.draw_circle_filled(x, y, TILE_SIZE * 0.38, colour)
+
+    def _draw_volume(self, volume: float) -> None:
+        volume_widget.draw(volume)

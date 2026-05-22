@@ -6,6 +6,7 @@ import arcade.camera
 import arcade.gui
 import arcade.shape_list
 
+from app.ui import volume_widget
 from core.components import TileKind
 from net.client import GameClient
 from net.protocol import GameStartMsg, LobbyUpdateMsg
@@ -27,6 +28,7 @@ class LobbyScene:
         self._player_name = player_name
         self._players: list[dict] = []
         self._ready_sent = False
+        self._volume = 1.0
         self._spawn_shapes: arcade.shape_list.ShapeElementList = (
             arcade.shape_list.ShapeElementList()
         )
@@ -107,7 +109,8 @@ class LobbyScene:
                 from app.scenes.game_scene import GameScene
                 self._ui.disable()
                 self._scene_manager.replace(
-                    GameScene(self._client, self._scene_manager, self._player_name)
+                    GameScene(self._client, self._scene_manager, self._player_name,
+                              volume=self._volume)
                 )
                 return
 
@@ -123,6 +126,7 @@ class LobbyScene:
         if not self._players:
             self._waiting_text.draw()
         self._ui.draw()
+        volume_widget.draw(self._volume)
 
     def on_resize(self, width: int, height: int) -> None:
         self._camera.zoom = min(width / self._map_w, height / self._map_h)
@@ -132,7 +136,10 @@ class LobbyScene:
         self._waiting_text.y = height / 2
 
     def on_key_press(self, key: int, modifiers: int) -> None:
-        pass
+        if key == arcade.key.BRACKETLEFT:
+            self._volume = round(max(0.0, self._volume - 0.1), 1)
+        elif key == arcade.key.BRACKETRIGHT:
+            self._volume = round(min(1.0, self._volume + 0.1), 1)
 
     def on_key_release(self, key: int, modifiers: int) -> None:
         pass

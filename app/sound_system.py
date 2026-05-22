@@ -21,10 +21,19 @@ _PICKUP_PATHS: dict[PowerupKind, str] = {
 
 
 class SoundSystem:
-    def __init__(self, local_player_id: int | None) -> None:
+    def __init__(self, local_player_id: int | None, volume: float = 1.0) -> None:
         self._player_id = local_player_id
+        self._volume = max(0.0, min(1.0, volume))
         self._explosions = [arcade.load_sound(p) for p in _EXPLOSION_PATHS]
         self._pickups = {k: arcade.load_sound(p) for k, p in _PICKUP_PATHS.items()}
+
+    @property
+    def volume(self) -> float:
+        return self._volume
+
+    @volume.setter
+    def volume(self, value: float) -> None:
+        self._volume = max(0.0, min(1.0, value))
 
     def update(self, prev: GameState | None, curr: GameState) -> None:
         self._check_explosions(prev, curr)
@@ -34,7 +43,7 @@ class SoundSystem:
         prev_cells = {(e.col, e.row) for e in prev.explosions} if prev else set()
         curr_cells = {(e.col, e.row) for e in curr.explosions}
         if curr_cells - prev_cells:
-            arcade.play_sound(random.choice(self._explosions))
+            arcade.play_sound(random.choice(self._explosions), volume=self._volume)
 
     def _check_pickups(self, prev: GameState | None, curr: GameState) -> None:
         if prev is None or self._player_id is None:
@@ -49,4 +58,4 @@ class SoundSystem:
             if pos not in curr_positions and pos == player_pos:
                 sound = self._pickups.get(kind)
                 if sound:
-                    arcade.play_sound(sound)
+                    arcade.play_sound(sound, volume=self._volume)
