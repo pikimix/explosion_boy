@@ -33,5 +33,7 @@ class GameState:
     explosion_rays: list[ExplosionRay] = field(default_factory=list)
     powerups: list[PowerupComponent] = field(default_factory=list)
 
+    player_names: dict[int, str] = field(default_factory=dict)
+
     phase: GamePhase = GamePhase.LOBBY
     winner_id: int | None = None
