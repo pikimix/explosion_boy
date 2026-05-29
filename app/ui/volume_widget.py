@@ -1,66 +1,51 @@
-"""Shared volume bar widget drawn in the bottom-right corner of the screen."""
+"""Volume bar widget drawn in the HUD strip at the bottom-left of the screen."""
 from __future__ import annotations
 
 import arcade
 
+from app.ui.hud import HUD_WIDTH
+
+_PADDING = 10.0
+_BAR_H = 10
+_BAR_W = HUD_WIDTH - _PADDING * 2
+
 
 def draw(volume: float) -> None:
-    win = arcade.get_window()
-    bar_w, bar_h = 120, 12
-    padding = 14
-    hint_gap = 6
+    bar_left = _PADDING
+    bar_right = bar_left + _BAR_W
+    bar_cx = bar_left + _BAR_W / 2
+    bar_y = _PADDING + _BAR_H / 2
 
-    bar_right = win.width - padding
-    bar_left = bar_right - bar_w
-    bar_cx = bar_left + bar_w / 2
-    bar_y = padding + bar_h / 2
-
-    label_h = 18
-    bg_inner_pad = 8
-    bg_w = bar_w + hint_gap * 2 + 16 + bg_inner_pad * 2
-    bg_h = bar_h + label_h + 4 + bg_inner_pad * 2
-    bg_y = bar_y + (label_h + 4) / 2 - bg_inner_pad / 2
+    label_h = 16
+    bg_pad = 6
+    bg_w = _BAR_W + bg_pad * 2
+    bg_h = _BAR_H + label_h + 4 + bg_pad * 2
+    bg_y = bar_y + (label_h + 4) / 2 - bg_pad / 2
     arcade.draw_rect_filled(
         arcade.XYWH(bar_cx, bg_y, bg_w, bg_h),
         (0, 0, 0, 140),
     )
 
     arcade.draw_rect_filled(
-        arcade.XYWH(bar_cx, bar_y, bar_w, bar_h),
+        arcade.XYWH(bar_cx, bar_y, _BAR_W, _BAR_H),
         (60, 60, 60, 180),
     )
-    fill_w = bar_w * volume
+    fill_w = _BAR_W * volume
     if fill_w > 0:
         arcade.draw_rect_filled(
-            arcade.XYWH(bar_left + fill_w / 2, bar_y, fill_w, bar_h),
+            arcade.XYWH(bar_left + fill_w / 2, bar_y, fill_w, _BAR_H),
             (220, 220, 220, 220),
         )
     arcade.draw_rect_outline(
-        arcade.XYWH(bar_cx, bar_y, bar_w, bar_h),
+        arcade.XYWH(bar_cx, bar_y, _BAR_W, _BAR_H),
         (200, 200, 200, 180),
         border_width=1,
     )
     arcade.draw_text(
-        f'\U0001f50a {int(volume * 100)}%',
-        bar_cx, bar_y + bar_h / 2 + 4,
+        f'\U0001f50a {int(volume * 100)}%  [ ]',
+        bar_cx, bar_y + _BAR_H / 2 + 4,
         color=(220, 220, 220, 200),
-        font_size=11,
+        font_size=10,
         anchor_x='center',
         anchor_y='bottom',
-    )
-    arcade.draw_text(
-        '[',
-        bar_left - hint_gap, bar_y,
-        color=(160, 160, 160, 180),
-        font_size=11,
-        anchor_x='right',
-        anchor_y='center',
-    )
-    arcade.draw_text(
-        ']',
-        bar_right + hint_gap, bar_y,
-        color=(160, 160, 160, 180),
-        font_size=11,
-        anchor_x='left',
-        anchor_y='center',
     )

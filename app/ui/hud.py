@@ -6,9 +6,14 @@ import arcade
 from core.state import GameState
 from engine.config import PLAYER_COLOURS
 
+HUD_WIDTH = 180.0
 _X = 10.0
 _TOP_MARGIN = 10.0
-_LINE_HEIGHT = 22.0
+_NAME_SIZE = 14
+_STAT_SIZE = 12
+_NAME_H = 18.0
+_STAT_H = 16.0
+_PLAYER_GAP = 8.0
 
 
 def draw(state: GameState) -> None:
@@ -17,16 +22,22 @@ def draw(state: GameState) -> None:
     for pid, stats in sorted(state.players.items()):
         colour = PLAYER_COLOURS[pid % len(PLAYER_COLOURS)]
         name = state.player_names.get(pid, f'P{pid + 1}')
-        label = (
-            f'{name}  \U0001f4a3 {stats.bomb_capacity - stats.bombs_in_use}'
-            f'  \U0001f525 {stats.blast_radius}'
-        )
         arcade.draw_text(
-            label, _X, y,
+            name, _X, y,
             color=colour[:3],
-            font_size=14,
+            font_size=_NAME_SIZE,
             bold=True,
             anchor_x='left',
             anchor_y='top',
         )
-        y -= _LINE_HEIGHT
+        y -= _NAME_H
+        arcade.draw_text(
+            f'\U0001f4a3 {stats.bomb_capacity - stats.bombs_in_use}'
+            f'  \U0001f525 {stats.blast_radius}',
+            _X, y,
+            color=colour[:3],
+            font_size=_STAT_SIZE,
+            anchor_x='left',
+            anchor_y='top',
+        )
+        y -= _STAT_H + _PLAYER_GAP

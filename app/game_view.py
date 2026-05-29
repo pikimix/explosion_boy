@@ -15,6 +15,7 @@ import arcade
 import arcade.camera
 
 from app.ui import hud, volume_widget
+from app.ui.hud import HUD_WIDTH
 from core.components import TileKind
 from core.state import GameState
 from engine.config import (
@@ -37,13 +38,18 @@ class GameView:
         self._bomb_start_times: dict[tuple[int, int], float] = {}
         self._map_w = GRID_COLS * TILE_SIZE
         self._map_h = GRID_ROWS * TILE_SIZE
-        self._camera = arcade.camera.Camera2D(
+        self._camera = self._make_camera(WINDOW_W, WINDOW_H)
+
+    def _make_camera(self, width: float, height: float) -> arcade.camera.Camera2D:
+        play_w = width - HUD_WIDTH
+        return arcade.camera.Camera2D(
+            viewport=arcade.LBWH(HUD_WIDTH, 0, play_w, height),
             position=(self._map_w / 2, self._map_h / 2),
-            zoom=min(WINDOW_W / self._map_w, WINDOW_H / self._map_h),
+            zoom=min(play_w / self._map_w, height / self._map_h),
         )
 
     def on_resize(self, width: int, height: int) -> None:
-        self._camera.zoom = min(width / self._map_w, height / self._map_h)
+        self._camera = self._make_camera(width, height)
 
     def draw(
         self,
