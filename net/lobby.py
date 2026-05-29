@@ -45,9 +45,9 @@ class LobbyManager:
         )
         self._broadcast_lobby()
 
-    def on_ready(self, peer_id: UUID) -> None:
+    def on_ready(self, peer_id: UUID, ready: bool) -> None:
         if player := self._players.get(peer_id):
-            player.ready = True
+            player.ready = ready
             self._broadcast_lobby()
 
     def on_disconnect(self, peer_id: UUID) -> None:

@@ -67,8 +67,8 @@ class GameClient:
     def send_join(self, name: str) -> None:
         self._transport.send(JoinMsg(player_name=name).encode(), CHANNEL_RELIABLE)
 
-    def send_ready(self) -> None:
-        self._transport.send(ReadyMsg().encode(), CHANNEL_RELIABLE)
+    def send_ready(self, ready: bool) -> None:
+        self._transport.send(ReadyMsg(ready=ready).encode(), CHANNEL_RELIABLE)
 
     def poll_messages(self) -> list[AnyMsg]:
         msgs: list[AnyMsg] = []

@@ -93,7 +93,7 @@ class GameServer:
             self._maybe_start_game()
 
         elif isinstance(msg, ReadyMsg):
-            self._lobby.on_ready(peer_id)
+            self._lobby.on_ready(peer_id, msg.ready)
             self._maybe_start_game()
 
         elif isinstance(msg, InputMsg):
