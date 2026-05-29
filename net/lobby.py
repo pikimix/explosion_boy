@@ -12,7 +12,7 @@ from net.protocol import (
     LobbyUpdateMsg,
     WelcomeMsg,
 )
-from engine.config import MAX_PLAYERS, SPAWN_POINTS
+from engine.config import MAX_PLAYERS, PLAYER_COLOURS, SPAWN_POINTS
 from engine.transport import CHANNEL_RELIABLE, ServerTransport
 from systems.world import generate_map, spawn_position_px
 
@@ -23,6 +23,7 @@ class _LobbyPlayer:
     player_id: int
     name: str
     ready: bool = False
+    colour_rgb: tuple[int, int, int] = (220, 50, 50)
 
 
 class LobbyManager:
@@ -37,7 +38,8 @@ class LobbyManager:
             return
         used = {p.player_id for p in self._players.values()}
         pid = next(i for i in range(MAX_PLAYERS) if i not in used)
-        self._players[peer_id] = _LobbyPlayer(peer_id, pid, name)
+        initial_colour = PLAYER_COLOURS[pid % len(PLAYER_COLOURS)][:3]
+        self._players[peer_id] = _LobbyPlayer(peer_id, pid, name, colour_rgb=initial_colour)
         self._transport.send(
             peer_id,
             WelcomeMsg(assigned_player_id=pid).encode(),
@@ -48,6 +50,11 @@ class LobbyManager:
     def on_ready(self, peer_id: UUID, ready: bool) -> None:
         if player := self._players.get(peer_id):
             player.ready = ready
+            self._broadcast_lobby()
+
+    def on_colour(self, peer_id: UUID, colour_rgb: tuple[int, int, int]) -> None:
+        if player := self._players.get(peer_id):
+            player.colour_rgb = colour_rgb
             self._broadcast_lobby()
 
     def on_disconnect(self, peer_id: UUID) -> None:
@@ -101,7 +108,8 @@ class LobbyManager:
 
     def _broadcast_lobby(self) -> None:
         players_list = [
-            {"id": lp.player_id, "name": lp.name, "ready": lp.ready}
+            {"id": lp.player_id, "name": lp.name, "ready": lp.ready,
+             "colour_rgb": list(lp.colour_rgb)}
             for lp in self._players.values()
         ]
         msg = LobbyUpdateMsg(players=players_list).encode()

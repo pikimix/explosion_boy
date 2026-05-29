@@ -14,6 +14,7 @@ from core.serialiser import encode_state
 from core.state import GameState
 from net.lobby import LobbyManager
 from net.protocol import (
+    ColourMsg,
     GameOverMsg,
     InputMsg,
     JoinMsg,
@@ -95,6 +96,9 @@ class GameServer:
         elif isinstance(msg, ReadyMsg):
             self._lobby.on_ready(peer_id, msg.ready)
             self._maybe_start_game()
+
+        elif isinstance(msg, ColourMsg):
+            self._lobby.on_colour(peer_id, msg.colour_rgb)
 
         elif isinstance(msg, InputMsg):
             if self._state and self._state.phase == GamePhase.PLAYING:

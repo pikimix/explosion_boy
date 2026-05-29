@@ -39,6 +39,20 @@ class ReadyMsg:
 
 
 @dataclass
+class ColourMsg:
+    colour_rgb: tuple[int, int, int]
+    TYPE: str = 'colour'
+
+    def encode(self) -> bytes:
+        r, g, b = self.colour_rgb
+        return encode_msg({'type': self.TYPE, 'r': r, 'g': g, 'b': b})
+
+    @staticmethod
+    def decode(d: dict) -> 'ColourMsg':
+        return ColourMsg(colour_rgb=(d['r'], d['g'], d['b']))
+
+
+@dataclass
 class InputMsg:
     player_id: int
     tick: int
@@ -145,12 +159,13 @@ class GameOverMsg:
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
-AnyMsg = (JoinMsg | ReadyMsg | InputMsg | WelcomeMsg | LobbyUpdateMsg
+AnyMsg = (JoinMsg | ReadyMsg | ColourMsg | InputMsg | WelcomeMsg | LobbyUpdateMsg
           | GameStartMsg | StateUpdateMsg | GameOverMsg)
 
 _DECODERS = {
     "join":         JoinMsg.decode,
     "ready":        lambda d: ReadyMsg(ready=d.get("ready", True)),
+    "colour":       ColourMsg.decode,
     "input":        InputMsg.decode,
     "welcome":      WelcomeMsg.decode,
     "lobby_update": LobbyUpdateMsg.decode,
