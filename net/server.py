@@ -162,6 +162,7 @@ class GameServer:
         if self._state is None:
             return
 
+        self._state.player_names = dict(self._player_names)
         state_bytes = encode_state(self._state)
         self._transport.broadcast(
             StateUpdateMsg(tick=tick, state_bytes=state_bytes).encode(),
