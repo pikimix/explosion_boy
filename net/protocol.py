@@ -31,10 +31,11 @@ class JoinMsg:
 
 @dataclass
 class ReadyMsg:
+    ready: bool
     TYPE: str = "ready"
 
     def encode(self) -> bytes:
-        return encode_msg({"type": self.TYPE})
+        return encode_msg({"type": self.TYPE, "ready": self.ready})
 
 
 @dataclass
@@ -149,7 +150,7 @@ AnyMsg = (JoinMsg | ReadyMsg | InputMsg | WelcomeMsg | LobbyUpdateMsg
 
 _DECODERS = {
     "join":         JoinMsg.decode,
-    "ready":        lambda d: ReadyMsg(),
+    "ready":        lambda d: ReadyMsg(ready=d.get("ready", True)),
     "input":        InputMsg.decode,
     "welcome":      WelcomeMsg.decode,
     "lobby_update": LobbyUpdateMsg.decode,
