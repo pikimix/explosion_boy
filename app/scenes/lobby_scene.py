@@ -1,9 +1,13 @@
 """Lobby waiting room. Connects to server, shows player list and ready status."""
 from __future__ import annotations
 
+import colorsys
+import math
+
 import arcade
 import arcade.camera
 import arcade.shape_list
+from PIL import Image
 
 from app.ui import volume_widget
 from app.ui.hud import HUD_WIDTH
@@ -27,10 +31,17 @@ _NAME_H = 17.0
 _STATUS_H = 15.0
 _PLAYER_GAP = 8.0
 
+# Colour picker popup dimensions
+_WHEEL_SIZE = 200         # diameter of the HSV wheel in pixels
+_POPUP_W = 280
+_POPUP_H = 310
+_SLIDER_H = 18
+_SLIDER_SEGMENTS = 24     # gradient segments in brightness slider
+
 
 class LobbyScene:
     def __init__(self, client: GameClient, player_name: str,
-                 scene_manager: "SceneManager") -> None:  # type: ignore[name-defined]
+                 scene_manager: 'SceneManager') -> None:  # type: ignore[name-defined]
         self._client = client
         self._scene_manager = scene_manager
         self._player_name = player_name
@@ -41,6 +52,19 @@ class LobbyScene:
             arcade.shape_list.ShapeElementList()
         )
         self._spawn_texts: list[arcade.Text] = []
+
+        # Colour picker state
+        self._hue = 0.0
+        self._saturation = 1.0
+        self._value = 1.0
+        self._colour_rgb: tuple[int, int, int] = (220, 50, 50)
+        self._colour_initialised = False
+        self._picker_open = False
+        self._wheel_texture: arcade.Texture | None = None
+        # Last click position within wheel, in arcade coords relative to wheel centre.
+        # Stored directly so the crosshair appears exactly where you clicked.
+        self._wheel_sel_dx = 0.0
+        self._wheel_sel_dy = 0.0
 
         self._tile_shapes = self._build_preview_tiles()
         self._map_w = GRID_COLS * TILE_SIZE
@@ -62,6 +86,93 @@ class LobbyScene:
         )
 
         client.send_join(player_name)
+
+    # ── Colour picker ─────────────────────────────────────────────────────────
+
+    def _ensure_wheel(self) -> None:
+        """Build the HSV wheel texture the first time the picker is opened."""
+        if self._wheel_texture is not None:
+            return
+        size = _WHEEL_SIZE
+        img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+        pixels = img.load()
+        assert pixels is not None
+        cx = cy = size / 2
+        r = size / 2 - 1
+        for y in range(size):
+            for x in range(size):
+                dx, dy = x - cx, y - cy
+                dist = math.sqrt(dx * dx + dy * dy)
+                if dist <= r:
+                    hue = (math.atan2(-dy, dx) / (2 * math.pi)) % 1.0
+                    sat = dist / r
+                    rv, gv, bv = colorsys.hsv_to_rgb(hue, sat, 1.0)
+                    pixels[x, y] = (int(rv * 255), int(gv * 255), int(bv * 255), 255)
+        self._wheel_texture = arcade.Texture(img)
+
+    def _update_colour_from_hsv(self) -> None:
+        rv, gv, bv = colorsys.hsv_to_rgb(self._hue, self._saturation, self._value)
+        self._colour_rgb = (int(rv * 255), int(gv * 255), int(bv * 255))
+
+    def _wheel_coords(self, win: arcade.Window) -> tuple[float, float]:
+        popup_cx = win.width / 2
+        popup_cy = win.height / 2
+        wheel_cx = popup_cx
+        wheel_cy = popup_cy + 38
+        return wheel_cx, wheel_cy
+
+    def _slider_bounds(self, win: arcade.Window) -> tuple[float, float, float, float]:
+        """Return (left, right, bottom, top) for the brightness slider."""
+        _, wheel_cy = self._wheel_coords(win)
+        slider_left = win.width / 2 - _WHEEL_SIZE / 2
+        slider_right = slider_left + _WHEEL_SIZE
+        slider_bottom = wheel_cy - _WHEEL_SIZE / 2 - 14
+        slider_top = slider_bottom + _SLIDER_H
+        return slider_left, slider_right, slider_bottom, slider_top
+
+    def on_mouse_press(self, x: float, y: float, button: int, modifiers: int) -> None:
+        if button != arcade.MOUSE_BUTTON_LEFT:
+            return
+        if self._picker_open:
+            self._handle_picker_click(x, y)
+        else:
+            # Click on the HUD colour swatch to open picker
+            swatch_w = HUD_WIDTH - _HUD_X * 2
+            if (_HUD_X <= x <= _HUD_X + swatch_w and 160 <= y <= 184):
+                self._ensure_wheel()
+                self._picker_open = True
+
+    def _handle_picker_click(self, x: float, y: float) -> None:
+        win = arcade.get_window()
+        wheel_cx, wheel_cy = self._wheel_coords(win)
+
+        dx, dy = x - wheel_cx, y - wheel_cy
+        dist = math.sqrt(dx * dx + dy * dy)
+
+        # Wheel click → update hue + saturation
+        if dist <= _WHEEL_SIZE / 2:
+            self._wheel_sel_dx = dx
+            self._wheel_sel_dy = dy
+            self._hue = (math.atan2(-dy, dx) / (2 * math.pi)) % 1.0
+            self._saturation = min(dist / (_WHEEL_SIZE / 2), 1.0)
+            self._update_colour_from_hsv()
+            self._client.send_colour(self._colour_rgb)
+            return
+
+        # Slider click → update brightness
+        sl, sr, sb, st = self._slider_bounds(win)
+        if sl <= x <= sr and sb <= y <= st:
+            self._value = max(0.0, min(1.0, (x - sl) / (sr - sl)))
+            self._update_colour_from_hsv()
+            self._client.send_colour(self._colour_rgb)
+            return
+
+        # Click outside popup → close
+        popup_cx = win.width / 2
+        popup_cy = win.height / 2
+        if not (popup_cx - _POPUP_W / 2 <= x <= popup_cx + _POPUP_W / 2
+                and popup_cy - _POPUP_H / 2 <= y <= popup_cy + _POPUP_H / 2):
+            self._picker_open = False
 
     # ── Camera ────────────────────────────────────────────────────────────────
 
@@ -100,6 +211,18 @@ class LobbyScene:
         for msg in self._client.poll_messages():
             if isinstance(msg, LobbyUpdateMsg):
                 self._players = msg.players
+                if not self._colour_initialised and self._client.player_id is not None:
+                    pid = self._client.player_id
+                    initial = PLAYER_COLOURS[pid % len(PLAYER_COLOURS)]
+                    self._colour_rgb = initial[:3]
+                    rv, gv, bv = (c / 255.0 for c in self._colour_rgb)
+                    self._hue, self._saturation, self._value = colorsys.rgb_to_hsv(rv, gv, bv)
+                    # Initialise crosshair to match the starting colour's position on the wheel
+                    r = _WHEEL_SIZE / 2
+                    self._wheel_sel_dx = math.cos(2 * math.pi * self._hue) * r * self._saturation
+                    self._wheel_sel_dy = -math.sin(2 * math.pi * self._hue) * r * self._saturation
+                    self._client.send_colour(self._colour_rgb)
+                    self._colour_initialised = True
                 self._rebuild_spawn_markers()
             elif isinstance(msg, GameStartMsg):
                 from app.scenes.game_scene import GameScene
@@ -121,6 +244,8 @@ class LobbyScene:
         if not self._players:
             self._waiting_text.draw()
         self._draw_hud()
+        if self._picker_open:
+            self._draw_picker_popup()
 
     def _draw_hud(self) -> None:
         win = arcade.get_window()
@@ -138,10 +263,10 @@ class LobbyScene:
 
         for p in self._players:
             pid = p['id']
-            colour = PLAYER_COLOURS[pid % len(PLAYER_COLOURS)]
+            colour = tuple(p.get('colour_rgb', PLAYER_COLOURS[pid % len(PLAYER_COLOURS)][:3]))
             arcade.draw_text(
                 p['name'], _HUD_X, y,
-                color=colour[:3],
+                color=colour,
                 font_size=_NAME_SIZE,
                 bold=True,
                 anchor_x='left',
@@ -161,7 +286,36 @@ class LobbyScene:
 
         volume_widget.draw(self._volume)
 
-        # Space-to-ready hint at bottom of HUD
+        # Colour swatch button
+        swatch_w = HUD_WIDTH - _HUD_X * 2
+        swatch_cx = _HUD_X + swatch_w / 2
+        arcade.draw_text(
+            'Your colour',
+            _HUD_X, 188,
+            color=(200, 200, 200),
+            font_size=10,
+            anchor_x='left',
+            anchor_y='bottom',
+        )
+        arcade.draw_rect_filled(
+            arcade.XYWH(swatch_cx, 172, swatch_w, 24),
+            (*self._colour_rgb, 255),
+        )
+        arcade.draw_rect_outline(
+            arcade.XYWH(swatch_cx, 172, swatch_w, 24),
+            (255, 255, 255, 120), 1,
+        )
+        brightness = sum(self._colour_rgb) / (255 * 3)
+        arcade.draw_text(
+            'click to change',
+            swatch_cx, 172,
+            color=(0, 0, 0, 160) if brightness > 0.5 else (255, 255, 255, 160),
+            font_size=9,
+            anchor_x='center',
+            anchor_y='center',
+        )
+
+        # Space-to-ready hint
         if self._ready:
             hint = 'Ready!\nWaiting for\nothers…'
             hint_colour = (100, 220, 100)
@@ -178,6 +332,96 @@ class LobbyScene:
             width=int(HUD_WIDTH - _HUD_X * 2),
         )
 
+    def _draw_picker_popup(self) -> None:
+        win = arcade.get_window()
+        popup_cx = win.width / 2
+        popup_cy = win.height / 2
+
+        # Background panel
+        arcade.draw_rect_filled(
+            arcade.XYWH(popup_cx, popup_cy, _POPUP_W, _POPUP_H),
+            (28, 28, 28, 230),
+        )
+        arcade.draw_rect_outline(
+            arcade.XYWH(popup_cx, popup_cy, _POPUP_W, _POPUP_H),
+            (160, 160, 160, 200), 2,
+        )
+        arcade.draw_text(
+            'Pick Your Colour',
+            popup_cx, popup_cy + _POPUP_H / 2 - 12,
+            color=(230, 230, 230),
+            font_size=13,
+            bold=True,
+            anchor_x='center',
+            anchor_y='top',
+        )
+
+        # HSV wheel
+        wheel_cx, wheel_cy = self._wheel_coords(win)
+        if self._wheel_texture:
+            arcade.draw_texture_rect(
+                self._wheel_texture,
+                arcade.XYWH(wheel_cx, wheel_cy, _WHEEL_SIZE, _WHEEL_SIZE),
+            )
+
+        # Selection crosshair — positioned from last click
+        sel_x = wheel_cx + self._wheel_sel_dx
+        sel_y = wheel_cy + self._wheel_sel_dy
+        arcade.draw_circle_outline(sel_x, sel_y, 7, (0, 0, 0, 180), 2)
+        arcade.draw_circle_outline(sel_x, sel_y, 7, (255, 255, 255, 220), 1)
+
+        # Brightness slider (black → full hue/sat colour)
+        sl, sr, sb, st = self._slider_bounds(win)
+        slider_cx = (sl + sr) / 2
+        slider_cy = (sb + st) / 2
+        seg_w = (sr - sl) / _SLIDER_SEGMENTS
+        for i in range(_SLIDER_SEGMENTS):
+            t = i / (_SLIDER_SEGMENTS - 1)
+            rv, gv, bv = colorsys.hsv_to_rgb(self._hue, self._saturation, t)
+            seg_cx = sl + (i + 0.5) * seg_w
+            arcade.draw_rect_filled(
+                arcade.XYWH(seg_cx, slider_cy, seg_w + 0.5, _SLIDER_H),
+                (int(rv * 255), int(gv * 255), int(bv * 255), 255),
+            )
+        arcade.draw_rect_outline(
+            arcade.XYWH(slider_cx, slider_cy, sr - sl, _SLIDER_H),
+            (140, 140, 140, 180), 1,
+        )
+        # Slider thumb
+        thumb_x = sl + self._value * (sr - sl)
+        arcade.draw_rect_filled(
+            arcade.XYWH(thumb_x, slider_cy, 3, _SLIDER_H + 8),
+            (255, 255, 255, 230),
+        )
+        arcade.draw_text(
+            'Brightness',
+            sl, sb - 4,
+            color=(150, 150, 150),
+            font_size=8,
+            anchor_x='left',
+            anchor_y='top',
+        )
+
+        # Current colour preview
+        preview_cx = sr + 24
+        arcade.draw_rect_filled(
+            arcade.XYWH(preview_cx, slider_cy, 32, 32),
+            (*self._colour_rgb, 255),
+        )
+        arcade.draw_rect_outline(
+            arcade.XYWH(preview_cx, slider_cy, 32, 32),
+            (180, 180, 180, 160), 1,
+        )
+
+        arcade.draw_text(
+            'Click outside to close',
+            popup_cx, popup_cy - _POPUP_H / 2 + 10,
+            color=(140, 140, 140),
+            font_size=9,
+            anchor_x='center',
+            anchor_y='bottom',
+        )
+
     def on_resize(self, width: int, height: int) -> None:
         self._camera = self._make_camera(width, height)
         play_cx = HUD_WIDTH + (width - HUD_WIDTH) / 2
@@ -187,7 +431,9 @@ class LobbyScene:
         self._waiting_text.y = height / 2
 
     def on_key_press(self, key: int, modifiers: int) -> None:
-        if key == arcade.key.SPACE:
+        if key == arcade.key.ESCAPE and self._picker_open:
+            self._picker_open = False
+        elif key == arcade.key.SPACE:
             self._ready = not self._ready
             self._client.send_ready(self._ready)
         elif key == arcade.key.BRACKETLEFT:
@@ -208,7 +454,8 @@ class LobbyScene:
             col, row = SPAWN_POINTS[pid]
             px = col * TILE_SIZE + TILE_SIZE / 2
             py = row * TILE_SIZE + TILE_SIZE / 2
-            colour = PLAYER_COLOURS[pid % len(PLAYER_COLOURS)]
+            colour_rgb = tuple(p.get('colour_rgb', PLAYER_COLOURS[pid % len(PLAYER_COLOURS)][:3]))
+            colour = (*colour_rgb, 255)
             shapes.append(
                 arcade.shape_list.create_ellipse_filled(
                     px, py, _PLAYER_RADIUS, _PLAYER_RADIUS, colour,

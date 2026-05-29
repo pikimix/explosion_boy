@@ -21,6 +21,7 @@ from typing import Callable
 from core.state import GameState
 from net.protocol import (
     AnyMsg,
+    ColourMsg,
     GameOverMsg,
     GameStartMsg,
     InputMsg,
@@ -69,6 +70,9 @@ class GameClient:
 
     def send_ready(self, ready: bool) -> None:
         self._transport.send(ReadyMsg(ready=ready).encode(), CHANNEL_RELIABLE)
+
+    def send_colour(self, colour_rgb: tuple[int, int, int]) -> None:
+        self._transport.send(ColourMsg(colour_rgb=colour_rgb).encode(), CHANNEL_RELIABLE)
 
     def poll_messages(self) -> list[AnyMsg]:
         msgs: list[AnyMsg] = []
