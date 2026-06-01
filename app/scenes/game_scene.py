@@ -17,10 +17,12 @@ class GameScene:
     def __init__(self, client: GameClient,
                  scene_manager: "SceneManager",  # type: ignore[name-defined]
                  player_name: str = "Player",
-                 volume: float = 1.0) -> None:
+                 volume: float = 1.0,
+                 colour_rgb: tuple[int, int, int] = (220, 50, 50)) -> None:
         self._client = client
         self._scene_manager = scene_manager
         self._player_name = player_name
+        self._colour_rgb = colour_rgb
         self._view = GameView()
         self._sounds = SoundSystem(client.player_id, volume=volume)
         self._prev_state: GameState | None = None
@@ -43,7 +45,8 @@ class GameScene:
             if isinstance(msg, GameOverMsg):
                 from app.scenes.game_over_scene import GameOverScene
                 self._scene_manager.replace(
-                    GameOverScene(msg, self._scene_manager, self._client, self._player_name)
+                    GameOverScene(msg, self._scene_manager, self._client, self._player_name,
+                                  volume=self._sounds.volume, colour_rgb=self._colour_rgb)
                 )
                 return
 
