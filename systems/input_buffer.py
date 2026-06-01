@@ -25,12 +25,14 @@ class InputBuffer:
     def drain(self, tick: TickNumber) -> list[PlayerInput]:
         """Return one input per registered player for this tick.
 
-        Takes the oldest queued input whose tick <= `tick`. Falls back to a
-        neutral input if the queue is empty (player sent nothing this tick).
+        Discards any inputs older than `tick` before looking for an exact
+        match. Falls back to a neutral input if nothing is queued for this tick.
         """
         result: list[PlayerInput] = []
         for pid, queue in self._queues.items():
-            if queue and queue[0].tick <= tick:
+            while queue and queue[0].tick < tick:
+                queue.popleft()
+            if queue and queue[0].tick == tick:
                 result.append(queue.popleft())
             else:
                 result.append(neutral_input(pid, tick))
