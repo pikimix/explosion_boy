@@ -11,11 +11,15 @@ class GameOverScene:
     def __init__(self, result: GameOverMsg,
                  scene_manager: "SceneManager",  # type: ignore[name-defined]
                  client: "GameClient",            # type: ignore[name-defined]
-                 player_name: str = "Player") -> None:
+                 player_name: str = "Player",
+                 volume: float = 1.0,
+                 colour_rgb: tuple[int, int, int] = (220, 50, 50)) -> None:
         self._scene_manager = scene_manager
         self._client = client
         self._result = result
         self._player_name = player_name
+        self._volume = volume
+        self._colour_rgb = colour_rgb
 
         self._ui = arcade.gui.UIManager()
         self._ui.enable()
@@ -41,7 +45,8 @@ class GameOverScene:
         from app.scenes.lobby_scene import LobbyScene
         self._ui.disable()
         self._scene_manager.replace(
-            LobbyScene(self._client, self._player_name, self._scene_manager)
+            LobbyScene(self._client, self._player_name, self._scene_manager,
+                       volume=self._volume, colour_rgb=self._colour_rgb)
         )
 
     def _on_quit(self, _event) -> None:

@@ -41,30 +41,30 @@ _SLIDER_SEGMENTS = 24     # gradient segments in brightness slider
 
 class LobbyScene:
     def __init__(self, client: GameClient, player_name: str,
-                 scene_manager: 'SceneManager') -> None:  # type: ignore[name-defined]
+                 scene_manager: 'SceneManager',  # type: ignore[name-defined]
+                 volume: float = 1.0,
+                 colour_rgb: tuple[int, int, int] | None = None) -> None:
         self._client = client
         self._scene_manager = scene_manager
         self._player_name = player_name
         self._players: list[dict] = []
         self._ready = False
-        self._volume = 1.0
+        self._volume = volume
         self._spawn_shapes: arcade.shape_list.ShapeElementList = (
             arcade.shape_list.ShapeElementList()
         )
         self._spawn_texts: list[arcade.Text] = []
 
         # Colour picker state
-        self._hue = 0.0
-        self._saturation = 1.0
-        self._value = 1.0
-        self._colour_rgb: tuple[int, int, int] = (220, 50, 50)
-        self._colour_initialised = False
+        self._colour_rgb: tuple[int, int, int] = colour_rgb if colour_rgb is not None else (220, 50, 50)
+        self._colour_initialised = colour_rgb is not None
+        rv, gv, bv = (c / 255.0 for c in self._colour_rgb)
+        self._hue, self._saturation, self._value = colorsys.rgb_to_hsv(rv, gv, bv)
+        r = _WHEEL_SIZE / 2
+        self._wheel_sel_dx = math.cos(2 * math.pi * self._hue) * r * self._saturation
+        self._wheel_sel_dy = -math.sin(2 * math.pi * self._hue) * r * self._saturation
         self._picker_open = False
         self._wheel_texture: arcade.Texture | None = None
-        # Last click position within wheel, in arcade coords relative to wheel centre.
-        # Stored directly so the crosshair appears exactly where you clicked.
-        self._wheel_sel_dx = 0.0
-        self._wheel_sel_dy = 0.0
 
         self._tile_shapes = self._build_preview_tiles()
         self._map_w = GRID_COLS * TILE_SIZE
@@ -217,7 +217,6 @@ class LobbyScene:
                     self._colour_rgb = initial[:3]
                     rv, gv, bv = (c / 255.0 for c in self._colour_rgb)
                     self._hue, self._saturation, self._value = colorsys.rgb_to_hsv(rv, gv, bv)
-                    # Initialise crosshair to match the starting colour's position on the wheel
                     r = _WHEEL_SIZE / 2
                     self._wheel_sel_dx = math.cos(2 * math.pi * self._hue) * r * self._saturation
                     self._wheel_sel_dy = -math.sin(2 * math.pi * self._hue) * r * self._saturation
@@ -228,7 +227,7 @@ class LobbyScene:
                 from app.scenes.game_scene import GameScene
                 self._scene_manager.replace(
                     GameScene(self._client, self._scene_manager, self._player_name,
-                              volume=self._volume)
+                              volume=self._volume, colour_rgb=self._colour_rgb)
                 )
                 return
 
