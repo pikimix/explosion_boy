@@ -7,7 +7,7 @@ WINDOW_TITLE = "Explosion Boy"
 
 TARGET_FPS = 60
 TICK_RATE = 20          # server authoritative ticks per second
-INPUT_LEAD_TICKS = 3    # client tick counter runs this many ticks ahead of server
+INPUT_LEAD_TICKS = 5    # client tick counter runs this many ticks ahead of server
 DEFAULT_PORT = 9000
 MAX_PLAYERS = 16
 
