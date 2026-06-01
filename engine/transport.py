@@ -85,10 +85,15 @@ def make_server_transport(backend: str = "tcp", **kwargs) -> ServerTransport:
 
     Supported backends:
       "tcp"  — TCPServerTransport(host, port, max_clients)
+      "dual" — DualServerTransport(host, port, max_clients)
+               TCP for reliable, UDP for unreliable (same port number).
     """
     if backend == "tcp":
         from engine.transports.tcp import TCPServerTransport
         return TCPServerTransport(**kwargs)
+    if backend == "dual":
+        from engine.transports.dual import DualServerTransport
+        return DualServerTransport(**kwargs)
     raise ValueError(f"Unknown transport backend: {backend!r}")
 
 
@@ -97,8 +102,13 @@ def make_client_transport(backend: str = "tcp", **kwargs) -> ClientTransport:
 
     Supported backends:
       "tcp"  — TCPClientTransport(host, port)
+      "dual" — DualClientTransport(host, port)
+               TCP for reliable, UDP for unreliable (same port number).
     """
     if backend == "tcp":
         from engine.transports.tcp import TCPClientTransport
         return TCPClientTransport(**kwargs)
+    if backend == "dual":
+        from engine.transports.dual import DualClientTransport
+        return DualClientTransport(**kwargs)
     raise ValueError(f"Unknown transport backend: {backend!r}")
