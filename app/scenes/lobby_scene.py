@@ -105,7 +105,7 @@ class LobbyScene:
                 dx, dy = x - cx, y - cy
                 dist = math.sqrt(dx * dx + dy * dy)
                 if dist <= r:
-                    hue = (math.atan2(-dy, dx) / (2 * math.pi)) % 1.0
+                    hue = (math.atan2(dy, dx) / (2 * math.pi)) % 1.0
                     sat = dist / r
                     rv, gv, bv = colorsys.hsv_to_rgb(hue, sat, 1.0)
                     pixels[x, y] = (int(rv * 255), int(gv * 255), int(bv * 255), 255)
