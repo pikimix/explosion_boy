@@ -33,6 +33,16 @@ def process_powerup_pickups(state: GameState) -> None:
         state.powerups.pop(i)
 
 
+REVERSE_CONTROLS_TICKS = 200   # 10 seconds at 20 tps
+
+
+def tick_status_effects(state: GameState) -> None:
+    """Count down timed powerup effects."""
+    for stats in state.players.values():
+        if stats.reversed_controls_ticks > 0:
+            stats.reversed_controls_ticks -= 1
+
+
 def _apply(state: GameState, player_id: int, kind: PowerupKind) -> None:
     stats = state.players.get(player_id)
     if stats is None:
@@ -43,3 +53,5 @@ def _apply(state: GameState, player_id: int, kind: PowerupKind) -> None:
         stats.blast_radius += 1
     elif kind == PowerupKind.SHIELD:
         stats.shield = True
+    elif kind == PowerupKind.REVERSE_CONTROLS:
+        stats.reversed_controls_ticks = REVERSE_CONTROLS_TICKS

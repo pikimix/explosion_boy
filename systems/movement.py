@@ -19,8 +19,13 @@ def process_movement(
         if not space.has_player(inp.player_id):
             continue
 
+        # Reverse controls if the debuff is active
+        stats = state.players.get(inp.player_id)
+        if stats is not None and stats.reversed_controls_ticks > 0:
+            mx, my = -inp.move_x, -inp.move_y
+        else:
+            mx, my = inp.move_x, inp.move_y
         # Normalise diagonal input so speed is consistent
-        mx, my = inp.move_x, inp.move_y
         mag = (mx * mx + my * my) ** 0.5
         if mag > 1.0:
             mx, my = mx / mag, my / mag

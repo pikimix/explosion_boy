@@ -96,7 +96,12 @@ class PredictionEngine:
     def _step_input(self, inp: PlayerInput) -> None:
         if not self._space.has_player(self._pid):
             return
-        mx, my = inp.move_x, inp.move_y
+        stats = (self._confirmed_state.players.get(self._pid)
+                 if self._confirmed_state else None)
+        if stats is not None and stats.reversed_controls_ticks > 0:
+            mx, my = -inp.move_x, -inp.move_y
+        else:
+            mx, my = inp.move_x, inp.move_y
         mag = (mx * mx + my * my) ** 0.5
         if mag > 1.0:
             mx, my = mx / mag, my / mag
