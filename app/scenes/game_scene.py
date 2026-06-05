@@ -77,6 +77,8 @@ class GameScene:
             local_player_id=self._client.player_id,
             predicted_x=pred.predicted_x if pred else None,
             predicted_y=pred.predicted_y if pred else None,
+            predicted_vx=pred.predicted_vx if pred else None,
+            predicted_vy=pred.predicted_vy if pred else None,
             volume=self._sounds.volume,
         )
 
