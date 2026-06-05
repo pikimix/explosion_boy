@@ -19,7 +19,13 @@ def main() -> None:
     parser.add_argument("--name", default="Player")
     parser.add_argument("--backend", default="tcp",
                         help="Transport backend (default: tcp)")
+    parser.add_argument("--no-shader", action="store_true",
+                        help="Disable GLSL particle effects")
     args = parser.parse_args()
+
+    if args.no_shader:
+        from app.particle_system import disable as _disable_particles
+        _disable_particles()
 
     transport = make_client_transport(
         args.backend, host=args.host, port=args.port
