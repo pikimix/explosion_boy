@@ -146,7 +146,8 @@ class GameView:
         for pid, phys in state.player_physics.items():
             x = pred_x if (pid == local_id and pred_x is not None) else phys.x
             y = pred_y if (pid == local_id and pred_y is not None) else phys.y
-            colour = PLAYER_COLOURS[pid % len(PLAYER_COLOURS)]
+            rgb = state.player_colours.get(pid, PLAYER_COLOURS[pid % len(PLAYER_COLOURS)][:3])
+            colour = (*rgb, 255)
             arcade.draw_circle_filled(x, y, TILE_SIZE * 0.38, colour)
 
     def _draw_volume(self, volume: float) -> None:

@@ -61,6 +61,7 @@ def encode_state(gs: GameState) -> bytes:
         "ph": int(gs.phase),
         "wi": gs.winner_id,
         "pn": {str(k): v for k, v in gs.player_names.items()},
+        "pc": {str(k): list(v) for k, v in gs.player_colours.items()},
     }
     return msgpack.packb(d, use_bin_type=True)
 
@@ -84,6 +85,7 @@ def decode_state(data: bytes) -> GameState:
         ],
         powerups=[PowerupComponent(PowerupKind(p[0]), p[1], p[2]) for p in d["pw"]],
         player_names={int(k): v for k, v in d.get("pn", {}).items()},
+        player_colours={int(k): tuple(v) for k, v in d.get("pc", {}).items()},
         phase=GamePhase(d["ph"]),
         winner_id=d["wi"],
     )

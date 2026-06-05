@@ -86,6 +86,8 @@ class LobbyManager:
             state.players[lp.player_id] = PlayerStats(player_id=lp.player_id)
             px, py = spawn_position_px(lp.player_id)
             state.player_physics[lp.player_id] = PhysicsState(px, py)
+            state.player_names[lp.player_id] = lp.name
+            state.player_colours[lp.player_id] = lp.colour_rgb
         return state
 
     def broadcast_game_start(self, state: GameState) -> None:
