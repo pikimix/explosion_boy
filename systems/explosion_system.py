@@ -13,7 +13,7 @@ from core.tick import TICK_DT
 from engine.config import EXPLOSION_DURATION_TICKS, TILE_SIZE
 from engine.physics import PhysicsSpace
 from systems.bomb_system import DetonationEvent, remove_bombs
-from systems.collision import cell_has_explosion, px_to_grid
+from systems.collision import px_to_grid
 from systems.event_bus import (
     BombDetonatedEvent,
     EventBus,
@@ -33,6 +33,9 @@ def process_detonations(
 ) -> None:
     queue: deque[DetonationEvent] = deque(detonations)
     processed_indices: set[int] = set()
+    bomb_by_cell: dict[tuple[int, int], int] = {
+        (b.col, b.row): bi for bi, b in enumerate(state.bombs)
+    }
 
     while queue:
         det = queue.popleft()
@@ -60,6 +63,7 @@ def process_detonations(
 
                 if tile == TileKind.SOFT_BLOCK:
                     state.tiles[r][c] = TileKind.EMPTY
+                    state.tiles_dirty = True
                     bus.emit(SoftBlockDestroyedEvent(c, r))
                     maybe_drop_powerup(state, c, r)
                     # Rebuild static walls to remove this block from physics
@@ -68,15 +72,15 @@ def process_detonations(
                     break
 
                 # Check for chain-reacting bomb at this cell
-                for bi, bomb in enumerate(state.bombs):
-                    if (bomb.col == c and bomb.row == r
-                            and bi not in processed_indices):
-                        queue.append(DetonationEvent(
-                            bomb_idx=bi,
-                            col=bomb.col, row=bomb.row,
-                            blast_radius=bomb.blast_radius,
-                            owner_id=bomb.owner_id,
-                        ))
+                bi = bomb_by_cell.get((c, r))
+                if bi is not None and bi not in processed_indices:
+                    bomb = state.bombs[bi]
+                    queue.append(DetonationEvent(
+                        bomb_idx=bi,
+                        col=bomb.col, row=bomb.row,
+                        blast_radius=bomb.blast_radius,
+                        owner_id=bomb.owner_id,
+                    ))
 
                 ray_len = dist
 
@@ -109,10 +113,16 @@ def _tick_and_keep(obj) -> bool:
 
 
 def _kill_players_in_explosions(state: GameState, bus: EventBus) -> None:
+    lit: set[tuple[int, int]] = {(e.col, e.row) for e in state.explosions}
+    for ray in state.explosion_rays:
+        dc, dr = ray.direction
+        for i in range(1, ray.length + 1):
+            lit.add((ray.origin_col + dc * i, ray.origin_row + dr * i))
+
     dead: list[int] = []
     for pid, phys in state.player_physics.items():
         col, row = px_to_grid(phys.x, phys.y)
-        if cell_has_explosion(state, col, row):
+        if (col, row) in lit:
             stats = state.players.get(pid)
             if stats is not None and stats.shield:
                 stats.shield = False

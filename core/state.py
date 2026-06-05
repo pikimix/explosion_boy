@@ -38,3 +38,9 @@ class GameState:
 
     phase: GamePhase = GamePhase.LOBBY
     winner_id: int | None = None
+
+    # Server-side caches — not serialised, not compared
+    tiles_dirty: bool = field(default=True, repr=False, compare=False)
+    tile_list_cache: list[list[int]] | None = field(
+        default=None, repr=False, compare=False, init=False
+    )
