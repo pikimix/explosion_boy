@@ -43,13 +43,15 @@ class LobbyScene:
     def __init__(self, client: GameClient, player_name: str,
                  scene_manager: 'SceneManager',  # type: ignore[name-defined]
                  volume: float = 1.0,
-                 colour_rgb: tuple[int, int, int] | None = None) -> None:
+                 colour_rgb: tuple[int, int, int] | None = None,
+                 debug: bool = False) -> None:
         self._client = client
         self._scene_manager = scene_manager
         self._player_name = player_name
         self._players: list[dict] = []
         self._ready = False
         self._volume = volume
+        self._debug = debug
         self._spawn_shapes: arcade.shape_list.ShapeElementList = (
             arcade.shape_list.ShapeElementList()
         )
@@ -281,7 +283,8 @@ class LobbyScene:
                 from app.scenes.game_scene import GameScene
                 self._scene_manager.replace(
                     GameScene(self._client, self._scene_manager, self._player_name,
-                              volume=self._volume, colour_rgb=self._colour_rgb)
+                              volume=self._volume, colour_rgb=self._colour_rgb,
+                              debug=self._debug)
                 )
                 return
 
