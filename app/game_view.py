@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import math
 import time
+from pathlib import Path
 
 import arcade
-
 import arcade.camera
+from arcade.sprite.animated import TextureKeyframe
 
 from app.ui import hud, volume_widget
 from app.ui.hud import HUD_WIDTH
@@ -23,6 +24,12 @@ from engine.config import (
     EXPLOSION_COLOUR, GRID_COLS, GRID_ROWS, PLAYER_COLOURS, POWERUP_COLOURS,
     SOFT_BLOCK_COLOUR, SOLID_WALL_COLOUR, TILE_SIZE, WINDOW_H, WINDOW_W,
 )
+
+_PLAYER_SPRITE_PATH = Path(__file__).parent.parent / 'resources' / 'sprites' / 'player.png'
+_PLAYER_ANIM_FRAME_SIZE = 32   # each frame is 32×32 in the sheet
+_PLAYER_ANIM_FRAMES = 4
+_PLAYER_ANIM_DURATION_MS = 100  # 10 fps
+_PLAYER_DRAW_SIZE = TILE_SIZE * 0.76
 
 _TILE_COLOURS = {
     TileKind.SOLID_WALL: SOLID_WALL_COLOUR,
@@ -39,6 +46,9 @@ class GameView:
         self._map_w = GRID_COLS * TILE_SIZE
         self._map_h = GRID_ROWS * TILE_SIZE
         self._camera = self._make_camera(WINDOW_W, WINDOW_H)
+        self._walk_animation: arcade.TextureAnimation | None = None
+        self._player_sprites: dict[int, arcade.TextureAnimationSprite] = {}
+        self._anim_last_time: float = 0.0
 
     def _make_camera(self, width: float, height: float) -> arcade.camera.Camera2D:
         play_w = width - HUD_WIDTH
@@ -136,6 +146,19 @@ class GameView:
             colour = POWERUP_COLOURS.get(int(pup.kind), (255, 255, 255, 255))
             arcade.draw_circle_filled(cx, cy, TILE_SIZE * 0.25, colour)
 
+    def _ensure_walk_animation(self) -> None:
+        if self._walk_animation is not None:
+            return
+        sheet = arcade.SpriteSheet(_PLAYER_SPRITE_PATH)
+        textures = sheet.get_texture_grid(
+            size=(_PLAYER_ANIM_FRAME_SIZE, _PLAYER_ANIM_FRAME_SIZE),
+            columns=_PLAYER_ANIM_FRAMES,
+            count=_PLAYER_ANIM_FRAMES,
+        )
+        self._walk_animation = arcade.TextureAnimation([
+            TextureKeyframe(tex, duration=_PLAYER_ANIM_DURATION_MS) for tex in textures
+        ])
+
     def _draw_players(
         self,
         state: GameState,
@@ -143,12 +166,37 @@ class GameView:
         pred_x: float | None,
         pred_y: float | None,
     ) -> None:
+        self._ensure_walk_animation()
+
+        now = time.monotonic()
+        dt = (now - self._anim_last_time) if self._anim_last_time else 0.0
+        self._anim_last_time = now
+
+        current_pids = set(state.player_physics)
+        for pid in list(self._player_sprites):
+            if pid not in current_pids:
+                del self._player_sprites[pid]
+
         for pid, phys in state.player_physics.items():
-            x = pred_x if (pid == local_id and pred_x is not None) else phys.x
-            y = pred_y if (pid == local_id and pred_y is not None) else phys.y
+            if pid not in self._player_sprites:
+                sprite = arcade.TextureAnimationSprite(animation=self._walk_animation)
+                sprite.width = _PLAYER_DRAW_SIZE
+                sprite.height = _PLAYER_DRAW_SIZE
+                self._player_sprites[pid] = sprite
+
+            sprite = self._player_sprites[pid]
+            sprite.center_x = pred_x if (pid == local_id and pred_x is not None) else phys.x
+            sprite.center_y = pred_y if (pid == local_id and pred_y is not None) else phys.y
             rgb = state.player_colours.get(pid, PLAYER_COLOURS[pid % len(PLAYER_COLOURS)][:3])
-            colour = (*rgb, 255)
-            arcade.draw_circle_filled(x, y, TILE_SIZE * 0.38, colour)
+            sprite.color = (*rgb, 255)
+
+            moving = abs(phys.vx) > 1.0 or abs(phys.vy) > 1.0
+            if moving:
+                sprite.update_animation(dt)
+            else:
+                sprite.time = 0.0
+
+            arcade.draw_sprite(sprite)
 
     def _draw_volume(self, volume: float) -> None:
         volume_widget.draw(volume)
