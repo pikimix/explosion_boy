@@ -57,6 +57,8 @@ class GameServer:
         self._peer_to_player: dict[UUID, int] = {}
         self._player_names: dict[int, str] = {}
 
+        self._last_alive_pids: set[int] = set()
+
         self._bus.subscribe(PlayerDiedEvent, self._on_player_died)
 
     def run(self) -> None:
@@ -149,6 +151,7 @@ class GameServer:
         assert self._state is not None
         assert self._space is not None
 
+        self._last_alive_pids = set(self._state.players.keys())
         tick = self._clock.advance()
         self._state.tick = tick
         inputs = self._input_buffer.drain(tick)
@@ -187,8 +190,14 @@ class GameServer:
             return
         winner_id = alive[0] if alive else None
         winner_name = self._player_names.get(winner_id, "") if winner_id is not None else ""
+        draw_names = (
+            [self._player_names[p] for p in self._last_alive_pids
+             if p in self._player_names]
+            if winner_id is None else []
+        )
         self._transport.broadcast(
-            GameOverMsg(winner_id=winner_id, winner_name=winner_name).encode(),
+            GameOverMsg(winner_id=winner_id, winner_name=winner_name,
+                        draw_names=draw_names).encode(),
             CHANNEL_RELIABLE,
         )
         print(f"Game over. Winner: {winner_name or 'draw'}")

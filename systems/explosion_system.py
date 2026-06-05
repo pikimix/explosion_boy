@@ -120,6 +120,8 @@ def _kill_players_in_explosions(state: GameState, bus: EventBus) -> None:
                 dead.append(pid)
 
     for pid in dead:
-        bus.emit(PlayerDiedEvent(pid, state.tick))
         state.players.pop(pid, None)
         state.player_physics.pop(pid, None)
+
+    for pid in dead:
+        bus.emit(PlayerDiedEvent(pid, state.tick))
