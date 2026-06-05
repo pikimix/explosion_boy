@@ -23,7 +23,7 @@ def draw(state: GameState) -> None:
     win = arcade.get_window()
     y = win.height - _TOP_MARGIN
     for pid, stats in sorted(state.players.items()):
-        colour = PLAYER_COLOURS[pid % len(PLAYER_COLOURS)]
+        colour = state.player_colours.get(pid, PLAYER_COLOURS[pid % len(PLAYER_COLOURS)][:3])
         name = state.player_names.get(pid, f'P{pid + 1}')
 
         if pid not in _name_texts:
