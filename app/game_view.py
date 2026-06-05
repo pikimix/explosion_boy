@@ -218,5 +218,14 @@ class GameView:
 
             arcade.draw_sprite(sprite)
 
+            stats = state.players.get(pid)
+            if stats is not None and stats.reversed_controls_ticks > 0:
+                arcade.draw_text(
+                    '\U0001f635',
+                    sprite.center_x, sprite.center_y + _PLAYER_DRAW_SIZE * 0.55,
+                    font_size=14,
+                    anchor_x='center', anchor_y='bottom',
+                )
+
     def _draw_volume(self, volume: float) -> None:
         volume_widget.draw(volume)

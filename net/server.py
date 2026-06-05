@@ -42,7 +42,7 @@ from systems.event_bus import EventBus, PlayerDiedEvent
 from systems.explosion_system import process_detonations, tick_explosions
 from systems.input_buffer import InputBuffer
 from systems.movement import process_movement
-from systems.powerup_system import process_powerup_pickups
+from systems.powerup_system import process_powerup_pickups, tick_status_effects
 
 
 class GameServer:
@@ -161,6 +161,7 @@ class GameServer:
         detonations = process_fuses(self._state)
         process_detonations(self._state, self._space, detonations, self._bus)
         process_powerup_pickups(self._state)
+        tick_status_effects(self._state)
         self._check_win_condition()
 
         if self._state is None:
