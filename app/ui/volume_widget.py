@@ -9,8 +9,12 @@ _PADDING = 10.0
 _BAR_H = 10
 _BAR_W = HUD_WIDTH - _PADDING * 2
 
+_volume_label: arcade.Text | None = None
+_hint_label: arcade.Text | None = None
+
 
 def draw(volume: float) -> None:
+    global _volume_label, _hint_label
     bar_left = _PADDING
     bar_right = bar_left + _BAR_W
     bar_cx = bar_left + _BAR_W / 2
@@ -41,19 +45,20 @@ def draw(volume: float) -> None:
         (200, 200, 200, 180),
         border_width=1,
     )
-    arcade.draw_text(
-        f'\U0001f50a Volume: {int(volume * 100)}%',
-        bar_cx, bar_y + _BAR_H / 2 + 14,
-        color=(220, 220, 220, 200),
-        font_size=10,
-        anchor_x='center',
-        anchor_y='bottom',
-    )
-    arcade.draw_text(
-        'press [ to lower, ] to raise',
-        bar_cx, bar_y + _BAR_H / 2 + 2,
-        color=(160, 160, 160, 180),
-        font_size=8,
-        anchor_x='center',
-        anchor_y='bottom',
-    )
+    if _volume_label is None:
+        _volume_label = arcade.Text(
+            '', bar_cx, bar_y + _BAR_H / 2 + 14,
+            color=(220, 220, 220, 200),
+            font_size=10, anchor_x='center', anchor_y='bottom',
+        )
+    _volume_label.text = f'\U0001f50a Volume: {int(volume * 100)}%'
+    _volume_label.draw()
+
+    if _hint_label is None:
+        _hint_label = arcade.Text(
+            'press [ to lower, ] to raise',
+            bar_cx, bar_y + _BAR_H / 2 + 2,
+            color=(160, 160, 160, 180),
+            font_size=8, anchor_x='center', anchor_y='bottom',
+        )
+    _hint_label.draw()
