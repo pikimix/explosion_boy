@@ -7,7 +7,6 @@ from core.components import BombComponent, PlayerInput
 from core.state import GameState
 from engine.config import BOMB_FUSE_TICKS, TILE_SIZE
 from engine.physics import PhysicsSpace
-from systems.collision import cell_has_bomb
 
 
 @dataclass
@@ -24,6 +23,7 @@ def apply_new_bombs(
     space: PhysicsSpace,
     inputs: list[PlayerInput],
 ) -> None:
+    bomb_cells: set[tuple[int, int]] = {(b.col, b.row) for b in state.bombs}
     for inp in inputs:
         if not inp.place_bomb:
             continue
@@ -41,7 +41,7 @@ def apply_new_bombs(
         col = int(phys.x // TILE_SIZE)
         row = int(phys.y // TILE_SIZE)
 
-        if cell_has_bomb(state, col, row):
+        if (col, row) in bomb_cells:
             continue
 
         px = col * TILE_SIZE + TILE_SIZE / 2
@@ -57,6 +57,7 @@ def apply_new_bombs(
         state.bombs.append(bomb)
         space.add_bomb(len(state.bombs) - 1, px, py)
         stats.bombs_in_use += 1
+        bomb_cells.add((col, row))
 
 
 def sync_pushed_bombs(state: GameState, space: PhysicsSpace) -> None:

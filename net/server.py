@@ -163,6 +163,8 @@ class GameServer:
         sync_pushed_bombs(self._state, self._space)
         detonations = process_fuses(self._state)
         process_detonations(self._state, self._space, detonations, self._bus)
+        if self._state is None:
+            return
         process_powerup_pickups(self._state)
         tick_status_effects(self._state)
         self._check_win_condition()
