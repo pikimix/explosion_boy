@@ -50,6 +50,14 @@ class SceneManager:
             if hasattr(scene, 'on_mouse_press'):
                 scene.on_mouse_press(x, y, button, modifiers)
 
+    def on_mouse_drag(
+        self, x: float, y: float, dx: float, dy: float, buttons: int, modifiers: int
+    ) -> None:
+        if self._stack:
+            scene = self._stack[-1]
+            if hasattr(scene, 'on_mouse_drag'):
+                scene.on_mouse_drag(x, y, dx, dy, buttons, modifiers)
+
     def on_resize(self, width: int, height: int) -> None:
         if self._stack:
             scene = self._stack[-1]
