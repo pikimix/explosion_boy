@@ -115,7 +115,11 @@ def _kill_players_in_explosions(state: GameState, bus: EventBus) -> None:
     for pid, phys in state.player_physics.items():
         col, row = px_to_grid(phys.x, phys.y)
         if cell_has_explosion(state, col, row):
-            dead.append(pid)
+            stats = state.players.get(pid)
+            if stats is not None and stats.shield:
+                stats.shield = False
+            else:
+                dead.append(pid)
 
     for pid in dead:
         bus.emit(PlayerDiedEvent(pid, state.tick))
