@@ -92,9 +92,7 @@ def process_detonations(
 
 
 def tick_explosions(state: GameState, bus: EventBus) -> None:
-    """Age all active explosions; kill players who enter lingering blast cells."""
-    _kill_players_in_explosions(state, bus)
-
+    """Age all active explosions. Player kills are handled by process_detonations."""
     state.explosions = [
         e for e in state.explosions
         if _tick_and_keep(e)
