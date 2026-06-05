@@ -119,7 +119,7 @@ class LobbyScene:
         popup_cx = win.width / 2
         popup_cy = win.height / 2
         wheel_cx = popup_cx
-        wheel_cy = popup_cy + 38
+        wheel_cy = popup_cy + 25
         return wheel_cx, wheel_cy
 
     def _slider_bounds(self, win: arcade.Window) -> tuple[float, float, float, float]:
@@ -127,7 +127,7 @@ class LobbyScene:
         _, wheel_cy = self._wheel_coords(win)
         slider_left = win.width / 2 - _WHEEL_SIZE / 2
         slider_right = slider_left + _WHEEL_SIZE
-        slider_bottom = wheel_cy - _WHEEL_SIZE / 2 - 14
+        slider_bottom = wheel_cy - _WHEEL_SIZE / 2 - 24
         slider_top = slider_bottom + _SLIDER_H
         return slider_left, slider_right, slider_bottom, slider_top
 
@@ -411,17 +411,6 @@ class LobbyScene:
             font_size=8,
             anchor_x='left',
             anchor_y='top',
-        )
-
-        # Current colour preview
-        preview_cx = sr + 24
-        arcade.draw_rect_filled(
-            arcade.XYWH(preview_cx, slider_cy, 32, 32),
-            (*self._colour_rgb, 255),
-        )
-        arcade.draw_rect_outline(
-            arcade.XYWH(preview_cx, slider_cy, 32, 32),
-            (180, 180, 180, 160), 1,
         )
 
         arcade.draw_text(
