@@ -21,6 +21,8 @@ def main() -> None:
                         help="Transport backend (default: tcp)")
     parser.add_argument("--no-shader", action="store_true",
                         help="Disable GLSL particle effects")
+    parser.add_argument("--debug", action="store_true",
+                        help="Enable debug overlays and controls")
     args = parser.parse_args()
 
     if args.no_shader:
@@ -34,7 +36,7 @@ def main() -> None:
 
     window = GameWindow()
     manager = SceneManager()
-    manager.push(LobbyScene(client, args.name, manager))
+    manager.push(LobbyScene(client, args.name, manager, debug=args.debug))
     window.set_scene_manager(manager)
 
     arcade.run()

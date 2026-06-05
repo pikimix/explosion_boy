@@ -18,11 +18,13 @@ class GameScene:
                  scene_manager: "SceneManager",  # type: ignore[name-defined]
                  player_name: str = "Player",
                  volume: float = 1.0,
-                 colour_rgb: tuple[int, int, int] = (220, 50, 50)) -> None:
+                 colour_rgb: tuple[int, int, int] = (220, 50, 50),
+                 debug: bool = False) -> None:
         self._client = client
         self._scene_manager = scene_manager
         self._player_name = player_name
         self._colour_rgb = colour_rgb
+        self._debug = debug
         self._view = GameView()
         self._sounds = SoundSystem(client.player_id, volume=volume)
         self._prev_state: GameState | None = None
@@ -44,9 +46,11 @@ class GameScene:
         for msg in self._client.poll_messages():
             if isinstance(msg, GameOverMsg):
                 from app.scenes.game_over_scene import GameOverScene
+                self._sounds.stop()
                 self._scene_manager.replace(
                     GameOverScene(msg, self._scene_manager, self._client, self._player_name,
-                                  volume=self._sounds.volume, colour_rgb=self._colour_rgb)
+                                  volume=self._sounds.volume, colour_rgb=self._colour_rgb,
+                                  debug=self._debug)
                 )
                 return
 
@@ -80,6 +84,7 @@ class GameScene:
             predicted_vx=pred.predicted_vx if pred else None,
             predicted_vy=pred.predicted_vy if pred else None,
             volume=self._sounds.volume,
+            speed=self._sounds.pitch if self._debug else None,
         )
 
     def on_key_press(self, key: int, modifiers: int) -> None:
@@ -88,6 +93,8 @@ class GameScene:
             self._sounds.volume = round(self._sounds.volume - 0.1, 1)
         elif key == arcade.key.BRACKETRIGHT:
             self._sounds.volume = round(self._sounds.volume + 0.1, 1)
+        elif key == arcade.key.T and self._debug:
+            self._sounds.step_pitch()
 
     def on_key_release(self, key: int, modifiers: int) -> None:
         self._keys.discard(key)
