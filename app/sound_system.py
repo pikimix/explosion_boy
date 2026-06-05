@@ -14,6 +14,8 @@ _EXPLOSION_PATHS = [
     ':resources:sounds/explosion2.wav',
 ]
 
+_SFX_GAIN = 0.5
+
 _PICKUP_PATHS: dict[PowerupKind, str] = {
     PowerupKind.EXTRA_BOMB: ':resources:sounds/upgrade1.wav',
     PowerupKind.BLAST_UP:   ':resources:sounds/upgrade2.wav',
@@ -43,7 +45,7 @@ class SoundSystem:
         prev_cells = {(e.col, e.row) for e in prev.explosions} if prev else set()
         curr_cells = {(e.col, e.row) for e in curr.explosions}
         if curr_cells - prev_cells:
-            arcade.play_sound(random.choice(self._explosions), volume=self._volume)
+            arcade.play_sound(random.choice(self._explosions), volume=self._volume * _SFX_GAIN)
 
     def _check_pickups(self, prev: GameState | None, curr: GameState) -> None:
         if prev is None or self._player_id is None:
@@ -58,4 +60,4 @@ class SoundSystem:
             if pos not in curr_positions and pos == player_pos:
                 sound = self._pickups.get(kind)
                 if sound:
-                    arcade.play_sound(sound, volume=self._volume)
+                    arcade.play_sound(sound, volume=self._volume * _SFX_GAIN)
