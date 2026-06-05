@@ -135,7 +135,14 @@ class LobbyScene:
         if button != arcade.MOUSE_BUTTON_LEFT:
             return
         if self._picker_open:
-            self._handle_picker_click(x, y)
+            if not self._handle_picker_input(x, y):
+                # Click outside popup → close
+                win = arcade.get_window()
+                popup_cx = win.width / 2
+                popup_cy = win.height / 2
+                if not (popup_cx - _POPUP_W / 2 <= x <= popup_cx + _POPUP_W / 2
+                        and popup_cy - _POPUP_H / 2 <= y <= popup_cy + _POPUP_H / 2):
+                    self._picker_open = False
         else:
             # Click on the HUD colour swatch to open picker
             swatch_w = HUD_WIDTH - _HUD_X * 2
@@ -143,14 +150,21 @@ class LobbyScene:
                 self._ensure_wheel()
                 self._picker_open = True
 
-    def _handle_picker_click(self, x: float, y: float) -> None:
+    def on_mouse_drag(
+        self, x: float, y: float, _dx: float, _dy: float, buttons: int, _modifiers: int
+    ) -> None:
+        if buttons & arcade.MOUSE_BUTTON_LEFT and self._picker_open:
+            self._handle_picker_input(x, y)
+
+    def _handle_picker_input(self, x: float, y: float) -> bool:
+        """Update picker state from a mouse position. Returns True if the position hit a control."""
         win = arcade.get_window()
         wheel_cx, wheel_cy = self._wheel_coords(win)
 
         dx, dy = x - wheel_cx, y - wheel_cy
         dist = math.sqrt(dx * dx + dy * dy)
 
-        # Wheel click → update hue + saturation
+        # Wheel → update hue + saturation
         if dist <= _WHEEL_SIZE / 2:
             self._wheel_sel_dx = dx
             self._wheel_sel_dy = dy
@@ -158,22 +172,17 @@ class LobbyScene:
             self._saturation = min(dist / (_WHEEL_SIZE / 2), 1.0)
             self._update_colour_from_hsv()
             self._client.send_colour(self._colour_rgb)
-            return
+            return True
 
-        # Slider click → update brightness
+        # Slider → update brightness
         sl, sr, sb, st = self._slider_bounds(win)
         if sl <= x <= sr and sb <= y <= st:
             self._value = max(0.0, min(1.0, (x - sl) / (sr - sl)))
             self._update_colour_from_hsv()
             self._client.send_colour(self._colour_rgb)
-            return
+            return True
 
-        # Click outside popup → close
-        popup_cx = win.width / 2
-        popup_cy = win.height / 2
-        if not (popup_cx - _POPUP_W / 2 <= x <= popup_cx + _POPUP_W / 2
-                and popup_cy - _POPUP_H / 2 <= y <= popup_cy + _POPUP_H / 2):
-            self._picker_open = False
+        return False
 
     # ── Camera ────────────────────────────────────────────────────────────────
 
