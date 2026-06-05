@@ -15,6 +15,7 @@ import arcade
 import arcade.camera
 from arcade.sprite.animated import TextureKeyframe
 
+from app.particle_system import ExplosionParticleSystem
 from app.ui import hud, volume_widget
 from app.ui.hud import HUD_WIDTH
 from core.components import TileKind
@@ -49,6 +50,8 @@ class GameView:
         self._walk_animation: arcade.TextureAnimation | None = None
         self._player_sprites: dict[int, arcade.TextureAnimationSprite] = {}
         self._anim_last_time: float = 0.0
+        self._last_frame_time: float = 0.0
+        self._particles = ExplosionParticleSystem()
 
     def _make_camera(self, width: float, height: float) -> arcade.camera.Camera2D:
         play_w = width - HUD_WIDTH
@@ -71,11 +74,17 @@ class GameView:
         predicted_vy: float | None = None,
         volume: float = 1.0,
     ) -> None:
+        now = time.monotonic()
+        dt = now - self._last_frame_time if self._last_frame_time else 0.0
+        self._last_frame_time = now
+
         with self._camera.activate():
             self._draw_tiles(state)
             self._draw_powerups(state)
             self._draw_bombs(state)
             self._draw_explosions(state)
+            self._particles.update(dt, state)
+            self._particles.draw()
             self._draw_players(state, local_player_id, predicted_x, predicted_y, predicted_vx, predicted_vy)
         hud.draw(state)
         self._draw_volume(volume)
