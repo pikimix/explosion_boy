@@ -43,12 +43,26 @@ class GameOverScene:
                                             anchor_y="center_y")
         )
 
-        headline = f"{result.winner_name} wins!" if result.winner_id is not None else "Draw!"
+        if result.winner_id is not None:
+            headline = f"{result.winner_name} wins!"
+            subheadline = None
+        elif result.draw_names:
+            headline = "Draw!"
+            subheadline = " & ".join(result.draw_names)
+        else:
+            headline = "Draw!"
+            subheadline = None
+
         self._headline_text = arcade.Text(
             headline, 0, 0,
             arcade.color.WHITE, font_size=40, bold=True,
             anchor_x='center',
         )
+        self._subheadline_text = arcade.Text(
+            subheadline or "", 0, 0,
+            arcade.color.LIGHT_GRAY, font_size=24,
+            anchor_x='center',
+        ) if subheadline else None
 
     def _on_again(self, _event) -> None:
         from app.scenes.lobby_scene import LobbyScene
@@ -71,6 +85,10 @@ class GameOverScene:
         self._headline_text.x = win.width / 2
         self._headline_text.y = win.height / 2 + 100
         self._headline_text.draw()
+        if self._subheadline_text:
+            self._subheadline_text.x = win.width / 2
+            self._subheadline_text.y = win.height / 2 + 55
+            self._subheadline_text.draw()
         self._ui.draw()
 
     def on_key_press(self, key: int, modifiers: int) -> None:

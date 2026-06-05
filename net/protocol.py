@@ -146,15 +146,17 @@ class StateUpdateMsg:
 class GameOverMsg:
     winner_id: int | None
     winner_name: str
+    draw_names: list[str] = field(default_factory=list)
     TYPE: str = "game_over"
 
     def encode(self) -> bytes:
         return encode_msg({"type": self.TYPE, "wid": self.winner_id,
-                           "wname": self.winner_name})
+                           "wname": self.winner_name, "dnames": self.draw_names})
 
     @staticmethod
     def decode(d: dict) -> "GameOverMsg":
-        return GameOverMsg(winner_id=d["wid"], winner_name=d["wname"])
+        return GameOverMsg(winner_id=d["wid"], winner_name=d["wname"],
+                           draw_names=d.get("dnames", []))
 
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
