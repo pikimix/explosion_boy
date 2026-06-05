@@ -86,6 +86,48 @@ class LobbyScene:
             anchor_x='center',
         )
 
+        swatch_w = HUD_WIDTH - _HUD_X * 2
+        swatch_cx = _HUD_X + swatch_w / 2
+
+        self._hud_header_text = arcade.Text(
+            'Players', _HUD_X, 0,
+            color=(200, 200, 200), font_size=12, bold=True,
+            anchor_x='left', anchor_y='top',
+        )
+        self._your_colour_text = arcade.Text(
+            'Your colour', _HUD_X, 188,
+            color=(200, 200, 200), font_size=10,
+            anchor_x='left', anchor_y='bottom',
+        )
+        self._swatch_label_text = arcade.Text(
+            'click to change', swatch_cx, 172,
+            color=(255, 255, 255, 160), font_size=9,
+            anchor_x='center', anchor_y='center',
+        )
+        self._hint_text = arcade.Text(
+            'Press SPACE\nto ready up', _HUD_X, 70,
+            color=(200, 200, 200), font_size=11,
+            anchor_x='left', anchor_y='bottom',
+            multiline=True, width=int(HUD_WIDTH - _HUD_X * 2),
+        )
+        self._picker_title_text = arcade.Text(
+            'Pick Your Colour', 0, 0,
+            color=(230, 230, 230), font_size=13, bold=True,
+            anchor_x='center', anchor_y='top',
+        )
+        self._picker_brightness_text = arcade.Text(
+            'Brightness', 0, 0,
+            color=(150, 150, 150), font_size=8,
+            anchor_x='left', anchor_y='top',
+        )
+        self._picker_close_text = arcade.Text(
+            'Click outside to close', 0, 0,
+            color=(140, 140, 140), font_size=9,
+            anchor_x='center', anchor_y='bottom',
+        )
+        self._hud_name_texts: list[arcade.Text] = []
+        self._hud_status_texts: list[arcade.Text] = []
+
         client.send_join(player_name)
 
     # ── Colour picker ─────────────────────────────────────────────────────────
@@ -262,37 +304,39 @@ class LobbyScene:
         win = arcade.get_window()
         y = win.height - _HUD_TOP_MARGIN
 
-        arcade.draw_text(
-            'Players', _HUD_X, y,
-            color=(200, 200, 200),
-            font_size=12,
-            bold=True,
-            anchor_x='left',
-            anchor_y='top',
-        )
+        self._hud_header_text.y = y
+        self._hud_header_text.draw()
         y -= 22.0
 
-        for p in self._players:
+        while len(self._hud_name_texts) < len(self._players):
+            self._hud_name_texts.append(arcade.Text(
+                '', _HUD_X, 0, (255, 255, 255),
+                font_size=_NAME_SIZE, bold=True,
+                anchor_x='left', anchor_y='top',
+            ))
+            self._hud_status_texts.append(arcade.Text(
+                '', _HUD_X, 0, (180, 180, 180),
+                font_size=_STATUS_SIZE,
+                anchor_x='left', anchor_y='top',
+            ))
+
+        for i, p in enumerate(self._players):
             pid = p['id']
             colour = tuple(p.get('colour_rgb', PLAYER_COLOURS[pid % len(PLAYER_COLOURS)][:3]))
-            arcade.draw_text(
-                p['name'], _HUD_X, y,
-                color=colour,
-                font_size=_NAME_SIZE,
-                bold=True,
-                anchor_x='left',
-                anchor_y='top',
-            )
+
+            nt = self._hud_name_texts[i]
+            nt.text = p['name']
+            nt.color = colour
+            nt.y = y
+            nt.draw()
             y -= _NAME_H
+
             ready = p['ready']
-            arcade.draw_text(
-                '✓ Ready' if ready else '… Waiting',
-                _HUD_X, y,
-                color=(100, 220, 100) if ready else (180, 180, 180),
-                font_size=_STATUS_SIZE,
-                anchor_x='left',
-                anchor_y='top',
-            )
+            st = self._hud_status_texts[i]
+            st.text = '✓ Ready' if ready else '… Waiting'
+            st.color = (100, 220, 100) if ready else (180, 180, 180)
+            st.y = y
+            st.draw()
             y -= _STATUS_H + _PLAYER_GAP
 
         volume_widget.draw(self._volume)
@@ -300,14 +344,7 @@ class LobbyScene:
         # Colour swatch button
         swatch_w = HUD_WIDTH - _HUD_X * 2
         swatch_cx = _HUD_X + swatch_w / 2
-        arcade.draw_text(
-            'Your colour',
-            _HUD_X, 188,
-            color=(200, 200, 200),
-            font_size=10,
-            anchor_x='left',
-            anchor_y='bottom',
-        )
+        self._your_colour_text.draw()
         arcade.draw_rect_filled(
             arcade.XYWH(swatch_cx, 172, swatch_w, 24),
             (*self._colour_rgb, 255),
@@ -317,31 +354,17 @@ class LobbyScene:
             (255, 255, 255, 120), 1,
         )
         brightness = sum(self._colour_rgb) / (255 * 3)
-        arcade.draw_text(
-            'click to change',
-            swatch_cx, 172,
-            color=(0, 0, 0, 160) if brightness > 0.5 else (255, 255, 255, 160),
-            font_size=9,
-            anchor_x='center',
-            anchor_y='center',
-        )
+        self._swatch_label_text.color = (0, 0, 0, 160) if brightness > 0.5 else (255, 255, 255, 160)
+        self._swatch_label_text.draw()
 
         # Space-to-ready hint
         if self._ready:
-            hint = 'Ready!\nWaiting for\nothers…'
-            hint_colour = (100, 220, 100)
+            self._hint_text.text = 'Ready!\nWaiting for\nothers…'
+            self._hint_text.color = (100, 220, 100)
         else:
-            hint = 'Press SPACE\nto ready up'
-            hint_colour = (200, 200, 200)
-        arcade.draw_text(
-            hint, _HUD_X, 70,
-            color=hint_colour,
-            font_size=11,
-            anchor_x='left',
-            anchor_y='bottom',
-            multiline=True,
-            width=int(HUD_WIDTH - _HUD_X * 2),
-        )
+            self._hint_text.text = 'Press SPACE\nto ready up'
+            self._hint_text.color = (200, 200, 200)
+        self._hint_text.draw()
 
     def _draw_picker_popup(self) -> None:
         win = arcade.get_window()
@@ -357,15 +380,9 @@ class LobbyScene:
             arcade.XYWH(popup_cx, popup_cy, _POPUP_W, _POPUP_H),
             (160, 160, 160, 200), 2,
         )
-        arcade.draw_text(
-            'Pick Your Colour',
-            popup_cx, popup_cy + _POPUP_H / 2 - 12,
-            color=(230, 230, 230),
-            font_size=13,
-            bold=True,
-            anchor_x='center',
-            anchor_y='top',
-        )
+        self._picker_title_text.x = popup_cx
+        self._picker_title_text.y = popup_cy + _POPUP_H / 2 - 12
+        self._picker_title_text.draw()
 
         # HSV wheel
         wheel_cx, wheel_cy = self._wheel_coords(win)
@@ -404,23 +421,13 @@ class LobbyScene:
             arcade.XYWH(thumb_x, slider_cy, 3, _SLIDER_H + 8),
             (255, 255, 255, 230),
         )
-        arcade.draw_text(
-            'Brightness',
-            sl, sb - 4,
-            color=(150, 150, 150),
-            font_size=8,
-            anchor_x='left',
-            anchor_y='top',
-        )
+        self._picker_brightness_text.x = sl
+        self._picker_brightness_text.y = sb - 4
+        self._picker_brightness_text.draw()
 
-        arcade.draw_text(
-            'Click outside to close',
-            popup_cx, popup_cy - _POPUP_H / 2 + 10,
-            color=(140, 140, 140),
-            font_size=9,
-            anchor_x='center',
-            anchor_y='bottom',
-        )
+        self._picker_close_text.x = popup_cx
+        self._picker_close_text.y = popup_cy - _POPUP_H / 2 + 10
+        self._picker_close_text.draw()
 
     def on_resize(self, width: int, height: int) -> None:
         self._camera = self._make_camera(width, height)
