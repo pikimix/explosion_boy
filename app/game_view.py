@@ -67,6 +67,8 @@ class GameView:
         local_player_id: int | None = None,
         predicted_x: float | None = None,
         predicted_y: float | None = None,
+        predicted_vx: float | None = None,
+        predicted_vy: float | None = None,
         volume: float = 1.0,
     ) -> None:
         with self._camera.activate():
@@ -74,7 +76,7 @@ class GameView:
             self._draw_powerups(state)
             self._draw_bombs(state)
             self._draw_explosions(state)
-            self._draw_players(state, local_player_id, predicted_x, predicted_y)
+            self._draw_players(state, local_player_id, predicted_x, predicted_y, predicted_vx, predicted_vy)
         hud.draw(state)
         self._draw_volume(volume)
 
@@ -165,6 +167,8 @@ class GameView:
         local_id: int | None,
         pred_x: float | None,
         pred_y: float | None,
+        pred_vx: float | None = None,
+        pred_vy: float | None = None,
     ) -> None:
         self._ensure_walk_animation()
 
@@ -190,7 +194,11 @@ class GameView:
             rgb = state.player_colours.get(pid, PLAYER_COLOURS[pid % len(PLAYER_COLOURS)][:3])
             sprite.color = (*rgb, 255)
 
-            moving = abs(phys.vx) > 1.0 or abs(phys.vy) > 1.0
+            if pid == local_id and pred_vx is not None and pred_vy is not None:
+                vx, vy = pred_vx, pred_vy
+            else:
+                vx, vy = phys.vx, phys.vy
+            moving = abs(vx) > 1.0 or abs(vy) > 1.0
             if moving:
                 sprite.update_animation(dt)
             else:

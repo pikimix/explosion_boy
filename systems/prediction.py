@@ -68,6 +68,16 @@ class PredictionEngine:
     def predicted_y(self) -> float:
         return self._predicted_y
 
+    @property
+    def predicted_vx(self) -> float:
+        vx, _ = self._space.get_player_velocity(self._pid)
+        return vx
+
+    @property
+    def predicted_vy(self) -> float:
+        _, vy = self._space.get_player_velocity(self._pid)
+        return vy
+
     # ── Internal helpers ──────────────────────────────────────────────────────
 
     def _rebuild_space(self, state: GameState) -> None:
