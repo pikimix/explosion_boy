@@ -58,6 +58,7 @@ class LobbyScene:
         # Colour picker state
         self._colour_rgb: tuple[int, int, int] = colour_rgb if colour_rgb is not None else (220, 50, 50)
         self._colour_initialised = colour_rgb is not None
+        self._colour_sent = False  # whether we've pushed colour to server this session
         rv, gv, bv = (c / 255.0 for c in self._colour_rgb)
         self._hue, self._saturation, self._value = colorsys.rgb_to_hsv(rv, gv, bv)
         r = _WHEEL_SIZE / 2
@@ -211,7 +212,7 @@ class LobbyScene:
         for msg in self._client.poll_messages():
             if isinstance(msg, LobbyUpdateMsg):
                 self._players = msg.players
-                if not self._colour_initialised and self._client.player_id is not None:
+                if self._client.player_id is not None and not self._colour_initialised:
                     pid = self._client.player_id
                     initial = PLAYER_COLOURS[pid % len(PLAYER_COLOURS)]
                     self._colour_rgb = initial[:3]
@@ -220,8 +221,10 @@ class LobbyScene:
                     r = _WHEEL_SIZE / 2
                     self._wheel_sel_dx = math.cos(2 * math.pi * self._hue) * r * self._saturation
                     self._wheel_sel_dy = -math.sin(2 * math.pi * self._hue) * r * self._saturation
-                    self._client.send_colour(self._colour_rgb)
                     self._colour_initialised = True
+                if self._client.player_id is not None and not self._colour_sent:
+                    self._client.send_colour(self._colour_rgb)
+                    self._colour_sent = True
                 self._rebuild_spawn_markers()
             elif isinstance(msg, GameStartMsg):
                 from app.scenes.game_scene import GameScene
