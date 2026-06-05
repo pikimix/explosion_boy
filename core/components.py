@@ -20,6 +20,7 @@ class GamePhase(IntEnum):
 class PowerupKind(IntEnum):
     EXTRA_BOMB = 1
     BLAST_UP   = 2
+    SHIELD     = 3
 
 
 @dataclass
@@ -38,6 +39,7 @@ class PlayerStats:
     bomb_capacity: int  = 1
     bombs_in_use: int   = 0
     blast_radius: int   = 2
+    shield: bool        = False
 
 
 @dataclass

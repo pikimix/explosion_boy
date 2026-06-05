@@ -41,3 +41,5 @@ def _apply(state: GameState, player_id: int, kind: PowerupKind) -> None:
         stats.bomb_capacity += 1
     elif kind == PowerupKind.BLAST_UP:
         stats.blast_radius += 1
+    elif kind == PowerupKind.SHIELD:
+        stats.shield = True
