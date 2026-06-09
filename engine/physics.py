@@ -37,7 +37,7 @@ class PhysicsSpace:
 
     # ── Tile walls ────────────────────────────────────────────────────────────
 
-    def rebuild_static_walls(self, tiles: list[list[int]]) -> None:
+    def rebuild_static_walls(self, tiles: list[list]) -> None:
         for shape in self._static_shapes:
             self._space.remove(shape)
         self._static_shapes.clear()
