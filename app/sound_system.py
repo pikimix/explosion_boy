@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import random
+from pathlib import Path
 
 import arcade
 
@@ -20,11 +21,14 @@ _MUSIC_PATH = ':resources:music/funkyrobot.mp3'
 _MUSIC_PITCH_NORMAL = 1.0
 _MUSIC_PITCH_TENSE = 1.26
 _SEMITONE = 2 ** (1 / 12)
+_SCREAM_CHANCE = 4
 
 _PICKUP_PATHS: dict[PowerupKind, str] = {
     PowerupKind.EXTRA_BOMB: ':resources:sounds/upgrade1.wav',
     PowerupKind.BLAST_UP:   ':resources:sounds/upgrade2.wav',
 }
+
+_SCREAM_PATH = Path(__file__).parent.parent / 'resources' / 'sounds' / 'scream.ogg'
 
 
 class SoundSystem:
@@ -33,6 +37,7 @@ class SoundSystem:
         self._volume = max(0.0, min(1.0, volume))
         self._explosions = [arcade.load_sound(p) for p in _EXPLOSION_PATHS]
         self._pickups = {k: arcade.load_sound(p) for k, p in _PICKUP_PATHS.items()}
+        self._scream = arcade.load_sound(str(_SCREAM_PATH))
         self._music = arcade.load_sound(_MUSIC_PATH)
         self._music_player = arcade.play_sound(self._music, volume=self._volume * _MUSIC_GAIN, loop=True)
         self._debug_pitch: float = 1.0
@@ -65,6 +70,7 @@ class SoundSystem:
 
     def update(self, prev: GameState | None, curr: GameState) -> None:
         self._check_explosions(prev, curr)
+        self._check_deaths(prev, curr)
         self._check_pickups(prev, curr)
         self._update_music_tempo(curr)
 
@@ -74,6 +80,13 @@ class SoundSystem:
         tense = len(curr.player_physics) <= 2
         base = _MUSIC_PITCH_TENSE if tense else _MUSIC_PITCH_NORMAL
         self._music_player.pitch = base * self._debug_pitch
+
+    def _check_deaths(self, prev: GameState | None, curr: GameState) -> None:
+        if prev is None:
+            return
+        deaths = prev.player_physics.keys() - curr.player_physics.keys()
+        if deaths and random.randint(1, _SCREAM_CHANCE) == 1:
+            arcade.play_sound(self._scream, volume=self._volume * _SFX_GAIN)
 
     def _check_explosions(self, prev: GameState | None, curr: GameState) -> None:
         prev_cells = {(e.col, e.row) for e in prev.explosions} if prev else set()
