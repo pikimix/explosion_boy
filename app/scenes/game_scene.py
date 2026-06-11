@@ -13,7 +13,7 @@ from app.sound_system import SoundSystem
 from core.components import PlayerInput
 from core.state import GameState
 from net.client import GameClient
-from net.protocol import GameOverMsg, InputMsg
+from net.protocol import GameOverMsg, GameStartMsg, InputMsg
 from engine.config import INPUT_LEAD_TICKS, TICK_RATE
 from systems.prediction import PredictionEngine
 
@@ -47,7 +47,7 @@ class GameScene:
                 self._prediction.reconcile(state)
 
     def update(self, dt: float) -> None:
-        # Check for non-state messages (game over, etc.)
+        # Check for non-state messages (game over, reconnect, etc.)
         for msg in self._client.poll_messages():
             if isinstance(msg, GameOverMsg):
                 from app.scenes.game_over_scene import GameOverScene
@@ -58,6 +58,14 @@ class GameScene:
                                   debug=self._debug)
                 )
                 return
+            elif isinstance(msg, GameStartMsg):
+                # Reconnected mid-game — reset tick and prediction for spectator role
+                state = self._client.get_state()
+                self._tick = (state.tick if state else 0) + INPUT_LEAD_TICKS
+                pid = self._client.player_id
+                self._prediction = PredictionEngine(pid) if pid is not None else None
+                if self._prediction and state:
+                    self._prediction.reconcile(state)
 
         # Reconcile prediction with latest server state; trigger sounds on new ticks
         state = self._client.get_state()
@@ -97,6 +105,9 @@ class GameScene:
             volume=self._sounds.volume,
             speed=self._sounds.pitch if self._debug else None,
         )
+        if self._client.reconnecting:
+            from app.ui.overlay import draw_reconnecting
+            draw_reconnecting()
 
     def on_key_press(self, key: int, modifiers: int) -> None:
         self._keys.add(key)

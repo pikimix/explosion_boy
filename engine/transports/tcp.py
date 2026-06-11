@@ -205,6 +205,8 @@ class TCPServerTransport:
 
 class TCPClientTransport:
     def __init__(self, host: str = "127.0.0.1", port: int = 9000) -> None:
+        self._host = host
+        self._port = port
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.setblocking(False)
         self._sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -280,3 +282,17 @@ class TCPClientTransport:
         self._connected = False
         self._connecting = False
         self._peer.close()
+
+    def reconnect(self) -> None:
+        self._peer.close()
+        self._connected = False
+        self._connecting = True
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setblocking(False)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self._sock = sock
+        self._peer = _Peer(sock, self._peer.peer_id)
+        try:
+            sock.connect((self._host, self._port))
+        except BlockingIOError:
+            pass

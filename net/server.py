@@ -20,6 +20,7 @@ from net.lobby import LobbyManager
 from net.protocol import (
     ColourMsg,
     GameOverMsg,
+    GameStartMsg,
     InputMsg,
     JoinMsg,
     ReadyMsg,
@@ -102,7 +103,16 @@ class GameServer:
             if pid is not None:
                 self._peer_to_player[peer_id] = pid
                 self._player_names[pid] = msg.player_name
-            self._maybe_start_game()
+            if self._state is not None and self._state.phase == GamePhase.PLAYING:
+                # Game already in progress — send current state so client can spectate
+                self._transport.send(
+                    peer_id,
+                    GameStartMsg(state_bytes=encode_state(self._state)).encode(),
+                    CHANNEL_RELIABLE,
+                )
+                print(f"[{_ts()}] {msg.player_name!r} joined as spectator (game in progress).")
+            else:
+                self._maybe_start_game()
 
         elif isinstance(msg, ReadyMsg):
             self._lobby.on_ready(peer_id, msg.ready)

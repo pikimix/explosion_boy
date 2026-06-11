@@ -398,6 +398,30 @@ class DualClientTransport:
         except OSError:
             pass
 
+    def reconnect(self) -> None:
+        try:
+            self._tcp_sock.close()
+        except OSError:
+            pass
+        try:
+            self._udp_sock.close()
+        except OSError:
+            pass
+        self._peer_uuid = None
+        self._connected = False
+        self._connecting = True
+        self._tcp_recv_buf = _RecvBuffer()
+        self._tcp_send_queue.clear()
+        self._tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._tcp_sock.setblocking(False)
+        self._tcp_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self._udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._udp_sock.setblocking(False)
+        try:
+            self._tcp_sock.connect((self._host, self._port))
+        except BlockingIOError:
+            pass
+
     def _recv_tcp(self, events: list[TransportEvent]) -> None:
         try:
             chunk = self._tcp_sock.recv(65536)
