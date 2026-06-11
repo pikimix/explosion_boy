@@ -34,16 +34,21 @@ from net.protocol import (
 from engine.transport import CHANNEL_RELIABLE, CHANNEL_UNRELIABLE, ClientTransport
 
 
+_RECONNECT_DELAYS = [2.0, 4.0, 8.0, 16.0, 30.0]
+
+
 class GameClient:
     def __init__(self, transport: ClientTransport) -> None:
         self._transport = transport
         self._player_id: int | None = None
+        self._player_name: str = ""
         self._last_state: GameState | None = None
         self._last_state_tick: int = -1
         self._lock = threading.Lock()
         self._pending_inputs: deque[InputMsg] = deque()
         self._message_queue: deque[AnyMsg] = deque()
         self._running = True
+        self._reconnecting = False
         self._thread = threading.Thread(target=self._net_loop, daemon=True)
         self._thread.start()
 
@@ -57,6 +62,10 @@ class GameClient:
     def connected(self) -> bool:
         return self._transport.connected
 
+    @property
+    def reconnecting(self) -> bool:
+        return self._reconnecting
+
     def get_state(self) -> GameState | None:
         with self._lock:
             return self._last_state
@@ -65,6 +74,7 @@ class GameClient:
         self._pending_inputs.append(inp)
 
     def send_join(self, name: str) -> None:
+        self._player_name = name
         self._transport.send(JoinMsg(player_name=name).encode(), CHANNEL_RELIABLE)
 
     def send_ready(self, ready: bool) -> None:
@@ -86,14 +96,35 @@ class GameClient:
     # ── Net thread ────────────────────────────────────────────────────────────
 
     def _net_loop(self) -> None:
-        from engine.transport import ReceiveEvent, DisconnectEvent
+        import time
+        from engine.transport import ConnectEvent, ReceiveEvent, DisconnectEvent
+        _attempt = 0
+        _reconnect_at: float | None = None
+
         while self._running:
+            now = time.monotonic()
+
+            # Fire a pending reconnect attempt when the delay has elapsed
+            if self._reconnecting and _reconnect_at is not None and now >= _reconnect_at:
+                _reconnect_at = None
+                self._transport.reconnect()
+
             events = self._transport.poll(timeout=0.05)
 
             # Scan for the newest snapshot without decoding all of them
             latest_state_msg: StateUpdateMsg | None = None
             for event in events:
-                if isinstance(event, ReceiveEvent):
+                if isinstance(event, ConnectEvent):
+                    # Fresh connection (or successful reconnect)
+                    self._reconnecting = False
+                    _attempt = 0
+                    _reconnect_at = None
+                    if self._player_name:
+                        self._transport.send(
+                            JoinMsg(player_name=self._player_name).encode(),
+                            CHANNEL_RELIABLE,
+                        )
+                elif isinstance(event, ReceiveEvent):
                     msg = decode_any(event.data)
                     if msg is None:
                         continue
@@ -104,7 +135,13 @@ class GameClient:
                     else:
                         self._handle_msg(msg)
                 elif isinstance(event, DisconnectEvent):
-                    self._running = False
+                    if not self._reconnecting:
+                        self._reconnecting = True
+                        self._player_id = None
+                        self._pending_inputs.clear()
+                    delay = _RECONNECT_DELAYS[min(_attempt, len(_RECONNECT_DELAYS) - 1)]
+                    _reconnect_at = time.monotonic() + delay
+                    _attempt += 1
 
             # Decode only the latest snapshot (one msgpack unpack instead of N)
             if latest_state_msg is not None:
@@ -113,10 +150,11 @@ class GameClient:
                     self._last_state = state
                     self._last_state_tick = latest_state_msg.tick
 
-            # Drain and send pending inputs
-            while self._pending_inputs:
-                inp = self._pending_inputs.popleft()
-                self._transport.send(inp.encode(), CHANNEL_RELIABLE)
+            # Drain and send pending inputs (skip while reconnecting)
+            if not self._reconnecting:
+                while self._pending_inputs:
+                    inp = self._pending_inputs.popleft()
+                    self._transport.send(inp.encode(), CHANNEL_RELIABLE)
 
     def _handle_msg(self, msg: AnyMsg) -> None:
         if isinstance(msg, WelcomeMsg):

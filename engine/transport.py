@@ -75,6 +75,9 @@ class ClientTransport(Protocol):
 
     def send(self, data: bytes, channel: int = CHANNEL_RELIABLE) -> None: ...
     def disconnect(self) -> None: ...
+    def reconnect(self) -> None:
+        """Close any existing connection and initiate a fresh non-blocking connect."""
+        ...
 
 
 # ── Factory ────────────────────────────────────────────────────────────────────

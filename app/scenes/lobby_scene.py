@@ -302,6 +302,9 @@ class LobbyScene:
         self._draw_hud()
         if self._picker_open:
             self._draw_picker_popup()
+        if self._client.reconnecting:
+            from app.ui.overlay import draw_reconnecting
+            draw_reconnecting()
 
     def _draw_hud(self) -> None:
         win = arcade.get_window()
