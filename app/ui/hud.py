@@ -42,8 +42,11 @@ def draw(state: GameState) -> None:
         stat_str = (
             f'\U0001f4a3 {stats.bomb_capacity - stats.bombs_in_use}'
             f'  \U0001f525 {stats.blast_radius}'
+            + (f'  ⚡{stats.speed_level}' if stats.speed_level > 0 else '')
             + ('  \U0001f6e1' if stats.shield else '')
             + ('  \U0001f635' if stats.reversed_controls_ticks > 0 else '')
+            + ('  \U0001f4a5S' if stats.has_super_bomb else '')
+            + ('  \U0001f4a5C' if stats.has_cluster_bomb else '')
         )
         if pid not in _stat_texts:
             _stat_texts[pid] = arcade.Text(

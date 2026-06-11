@@ -43,12 +43,16 @@ EXPLOSION_COLOUR:   tuple[int, int, int, int] = (255, 180, 0,   200)
 BOMB_BASE_COLOUR:   tuple[int, int, int, int] = (30,  30,  30,  255)
 BOMB_PULSE_COLOUR:  tuple[int, int, int, int] = (255, 220, 0,   255)
 
-# Keyed by PowerupKind value (1 = extra bomb, 2 = blast up, 3 = shield, 4 = reverse controls)
+# Keyed by PowerupKind value
 POWERUP_COLOURS: dict[int, tuple[int, int, int, int]] = {
-    1: (255, 215, 0,   255),   # gold
-    2: (255, 69,  0,   255),   # orange-red
-    3: (100, 200, 255, 255),   # sky blue
-    4: (200, 50,  220, 255),   # purple
+    1: (255, 215, 0,   255),   # gold        (EXTRA_BOMB)
+    2: (255, 69,  0,   255),   # orange-red  (BLAST_UP)
+    3: (100, 200, 255, 255),   # sky blue    (SHIELD)
+    4: (200, 50,  220, 255),   # purple      (REVERSE_CONTROLS)
+    5: (50,  220, 80,  255),   # green       (SPEED_UP)
+    6: (60,  60,  60,  255),   # dark grey   (SKULL)
+    7: (255, 50,  50,  255),   # bright red  (SUPER_BOMB)
+    8: (255, 140, 0,   255),   # deep orange (CLUSTER_BOMB)
 }
 
 PLAYER_COLOURS = [

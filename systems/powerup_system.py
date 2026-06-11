@@ -34,6 +34,8 @@ def process_powerup_pickups(state: GameState) -> None:
 
 
 REVERSE_CONTROLS_TICKS = 200   # 10 seconds at 20 tps
+SPEED_BOOST_MAX_LEVEL  = 3
+CLUSTER_SUB_FUSE_TICKS = 40    # 2 seconds at 20 tps
 
 
 def tick_status_effects(state: GameState) -> None:
@@ -55,3 +57,17 @@ def _apply(state: GameState, player_id: int, kind: PowerupKind) -> None:
         stats.shield = True
     elif kind == PowerupKind.REVERSE_CONTROLS:
         stats.reversed_controls_ticks = REVERSE_CONTROLS_TICKS
+    elif kind == PowerupKind.SPEED_UP:
+        stats.speed_level = min(stats.speed_level + 1, SPEED_BOOST_MAX_LEVEL)
+    elif kind == PowerupKind.SKULL:
+        effect = random.choice(["speed_down", "bomb_down", "blast_down"])
+        if effect == "speed_down":
+            stats.speed_level = max(0, stats.speed_level - 1)
+        elif effect == "bomb_down":
+            stats.bomb_capacity = max(1, stats.bomb_capacity - 1)
+        else:
+            stats.blast_radius = max(1, stats.blast_radius - 1)
+    elif kind == PowerupKind.SUPER_BOMB:
+        stats.has_super_bomb = True
+    elif kind == PowerupKind.CLUSTER_BOMB:
+        stats.has_cluster_bomb = True
