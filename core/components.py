@@ -49,6 +49,7 @@ class PlayerStats:
     speed_level:        int  = 0
     has_super_bomb:     bool = False
     has_cluster_bomb:   bool = False
+    shield_invincibility_ticks: int = 0
 
 
 @dataclass

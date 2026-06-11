@@ -43,6 +43,8 @@ def tick_status_effects(state: GameState) -> None:
     for stats in state.players.values():
         if stats.reversed_controls_ticks > 0:
             stats.reversed_controls_ticks -= 1
+        if stats.shield_invincibility_ticks > 0:
+            stats.shield_invincibility_ticks -= 1
 
 
 def _apply(state: GameState, player_id: int, kind: PowerupKind) -> None:
