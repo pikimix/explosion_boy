@@ -155,12 +155,14 @@ def _spawn_cluster_sub_bombs(
     for col, row, blast_radius in origins:
         bomb_cells = {(b.col, b.row) for b in state.bombs}
         for dc, dr in _DIRECTIONS:
-            for dist in range(1, 3):
+            for dist in range(1, 4):
                 c, r = col + dc * dist, row + dr * dist
                 if not (0 <= r < state.map_rows and 0 <= c < state.map_cols):
                     break
                 if state.tiles[r][c] != TileKind.EMPTY:
                     break  # wall or soft block stops placement in this direction
+                if dist < 2:
+                    continue  # walk through adjacent cell without placing
                 if (c, r) in bomb_cells:
                     continue  # cell occupied — try one step further
                 px = c * TILE_SIZE + TILE_SIZE / 2
