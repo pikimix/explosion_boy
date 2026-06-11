@@ -23,7 +23,7 @@ from core.state import GameState
 from engine.config import (
     BOMB_BASE_COLOUR, BOMB_FUSE_TICKS, BOMB_PULSE_COLOUR, EMPTY_TILE_COLOUR,
     EXPLOSION_COLOUR, GRID_COLS, GRID_ROWS, PLAYER_COLOURS, POWERUP_COLOURS,
-    SOFT_BLOCK_COLOUR, SOLID_WALL_COLOUR, TILE_SIZE, WINDOW_H, WINDOW_W,
+    POWERUP_SYMBOLS, SOFT_BLOCK_COLOUR, SOLID_WALL_COLOUR, TILE_SIZE, WINDOW_H, WINDOW_W,
 )
 
 _PLAYER_SPRITE_PATH = Path(__file__).parent.parent / 'resources' / 'sprites' / 'player.png'
@@ -52,6 +52,16 @@ class GameView:
         self._anim_last_time: float = 0.0
         self._last_frame_time: float = 0.0
         self._particles = ExplosionParticleSystem()
+        self._powerup_texts: dict[int, arcade.Text] = {
+            kind: arcade.Text(
+                symbol, 0, 0,
+                color=POWERUP_COLOURS.get(kind, (255, 255, 255, 255)),
+                font_size=28,
+                bold=True,
+                anchor_x='center', anchor_y='center',
+            )
+            for kind, symbol in POWERUP_SYMBOLS.items()
+        }
 
     def _make_camera(self, width: float, height: float) -> arcade.camera.Camera2D:
         play_w = width - HUD_WIDTH
@@ -157,8 +167,12 @@ class GameView:
         for pup in state.powerups:
             cx = pup.col * TILE_SIZE + TILE_SIZE / 2
             cy = pup.row * TILE_SIZE + TILE_SIZE / 2
-            colour = POWERUP_COLOURS.get(int(pup.kind), (255, 255, 255, 255))
-            arcade.draw_circle_filled(cx, cy, TILE_SIZE * 0.25, colour)
+            kind_val = int(pup.kind)
+            if kind_val in self._powerup_texts:
+                t = self._powerup_texts[kind_val]
+                t.x = cx
+                t.y = cy
+                t.draw()
 
     def _ensure_walk_animation(self) -> None:
         if self._walk_animation is not None:
