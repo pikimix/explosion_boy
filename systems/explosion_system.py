@@ -116,10 +116,11 @@ def _super_bomb_explosion(
     queue: deque[DetonationEvent],
     processed_indices: set[int],
 ) -> None:
-    """5×5 AOE explosion that passes through solid walls but still removes soft blocks."""
+    """AOE explosion scaled to half the owner's blast radius (min 5×5), passes through solid walls."""
     needs_rebuild = False
-    for dr in range(-2, 3):
-        for dc in range(-2, 3):
+    half = max(2, det.blast_radius // 2)
+    for dr in range(-half, half + 1):
+        for dc in range(-half, half + 1):
             c, r = det.col + dc, det.row + dr
             if not (0 <= r < state.map_rows and 0 <= c < state.map_cols):
                 continue
@@ -206,12 +207,16 @@ def _kill_players_in_explosions(state: GameState, bus: EventBus) -> None:
     dead: list[int] = []
     for pid, phys in state.player_physics.items():
         col, row = px_to_grid(phys.x, phys.y)
-        if (col, row) in lit:
-            stats = state.players.get(pid)
-            if stats is not None and stats.shield:
-                stats.shield = False
-            else:
-                dead.append(pid)
+        if (col, row) not in lit:
+            continue
+        stats = state.players.get(pid)
+        if stats is not None and stats.shield_invincibility_ticks > 0:
+            continue
+        if stats is not None and stats.shield:
+            stats.shield = False
+            stats.shield_invincibility_ticks = EXPLOSION_DURATION_TICKS
+        else:
+            dead.append(pid)
 
     for pid in dead:
         state.players.pop(pid, None)
