@@ -55,6 +55,17 @@ POWERUP_COLOURS: dict[int, tuple[int, int, int, int]] = {
     8: (255, 140, 0,   255),   # deep orange (CLUSTER_BOMB)
 }
 
+POWERUP_SYMBOLS: dict[int, str] = {
+    1: '+',    # EXTRA_BOMB
+    2: '↑',  # BLAST_UP       (↑)
+    3: '\U0001f6e1',  # SHIELD     (🛡)
+    4: '?',    # REVERSE_CONTROLS
+    5: '⚡',  # SPEED_UP      (⚡)
+    6: '☠',  # SKULL         (☠)
+    7: '★',  # SUPER_BOMB    (★)
+    8: '#',    # CLUSTER_BOMB
+}
+
 PLAYER_COLOURS = [
     (220, 50,  50,  255),   # red
     (50,  120, 220, 255),   # blue
