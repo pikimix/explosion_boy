@@ -44,9 +44,8 @@ TransportEvent = ConnectEvent | DisconnectEvent | ReceiveEvent
 class ServerTransport(Protocol):
     """Non-blocking server-side transport. Call poll() each game tick."""
 
-    def poll(self) -> list[TransportEvent]:
-        """Return all pending events (connects, disconnects, received data).
-        Never blocks."""
+    def poll(self, timeout: float = 0) -> list[TransportEvent]:
+        """Return all pending events. Blocks up to *timeout* seconds (0 = non-blocking)."""
         ...
 
     def send(self, peer_id: UUID, data: bytes,
@@ -70,9 +69,8 @@ class ClientTransport(Protocol):
     @property
     def connected(self) -> bool: ...
 
-    def poll(self) -> list[TransportEvent]:
-        """Return all pending events (connect confirmation, disconnects,
-        received data). Never blocks."""
+    def poll(self, timeout: float = 0) -> list[TransportEvent]:
+        """Return all pending events. Blocks up to *timeout* seconds (0 = non-blocking)."""
         ...
 
     def send(self, data: bytes, channel: int = CHANNEL_RELIABLE) -> None: ...

@@ -12,8 +12,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Explosion Boy server")
     parser.add_argument("--host", default=os.environ.get("SERVER_HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("SERVER_PORT", DEFAULT_PORT)))
-    parser.add_argument("--backend", default=os.environ.get("SERVER_BACKEND", "tcp"),
-                        help="Transport backend (default: tcp)")
+    parser.add_argument("--backend", default=os.environ.get("SERVER_BACKEND", "dual"),
+                        help="Transport backend (default: dual)")
     parser.add_argument("--debug", action="store_true",
                         help="Print input-buffer diagnostics each second")
     args = parser.parse_args()

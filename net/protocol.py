@@ -178,7 +178,10 @@ _DECODERS = {
 
 
 def decode_any(data: bytes) -> AnyMsg | None:
-    d = decode_msg(data)
+    try:
+        d = decode_msg(data)
+    except Exception:
+        return None
     decoder = _DECODERS.get(d.get("type", ""))
     if decoder is None:
         return None

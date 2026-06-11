@@ -2,6 +2,11 @@
 from __future__ import annotations
 
 import arcade
+from datetime import datetime
+
+
+def _ts() -> str:
+    return datetime.now().strftime('%H:%M:%S.%f')[:-3]
 
 from app.game_view import GameView
 from app.sound_system import SoundSystem
@@ -64,8 +69,10 @@ class GameScene:
             self._last_sound_tick = state.tick
 
         # Generate and send input at tick rate
-        self._tick_accum += dt
+        # Cap dt to one tick so a slow first frame (e.g. asset loading) never
+        # fires a catch-up burst that inflates the client lead permanently.
         tick_dt = 1.0 / TICK_RATE
+        self._tick_accum += min(dt, tick_dt)
         while self._tick_accum >= tick_dt:
             self._tick_accum -= tick_dt
             self._tick += 1
@@ -73,7 +80,7 @@ class GameScene:
             if self._debug and state:
                 lead = self._tick - state.tick
                 if lead != 0 and self._tick % 20 == 0:
-                    print(f"[client pid={self._client.player_id}] client_tick={self._tick} server_tick={state.tick} lead={lead} (expected {INPUT_LEAD_TICKS})")
+                    print(f"[{_ts()}] [client pid={self._client.player_id}] client_tick={self._tick} server_tick={state.tick} lead={lead} (expected {INPUT_LEAD_TICKS})")
 
     def draw(self) -> None:
         state = self._client.get_state()
@@ -134,3 +141,9 @@ class GameScene:
             player_id=pid, tick=tick,
             move_x=mx, move_y=my, place_bomb=place,
         ))
+
+        if self._debug:
+            if mx or my or place:
+                print(f"[{_ts()}] [client pid={pid}] tick={tick} input: mx={mx:+.0f} my={my:+.0f} bomb={place}")
+            elif tick % 20 == 0:
+                print(f"[{_ts()}] [client pid={pid}] tick={tick} input: (neutral)")

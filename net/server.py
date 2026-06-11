@@ -5,8 +5,12 @@ Run via: python run_server.py
 """
 from __future__ import annotations
 
-import time
+from datetime import datetime
 from uuid import UUID
+
+
+def _ts() -> str:
+    return datetime.now().strftime('%H:%M:%S.%f')[:-3]
 
 from core.clock import TickClock
 from core.components import GamePhase, PlayerInput
@@ -63,19 +67,23 @@ class GameServer:
         self._bus.subscribe(PlayerDiedEvent, self._on_player_died)
 
     def run(self) -> None:
-        print(f"Server running at {TICK_RATE} tps. Waiting for players…")
+        print(f"[{_ts()}] Server running at {TICK_RATE} tps. Waiting for players…")
         while True:
-            self._poll()
+            if self._state is not None and self._state.phase == GamePhase.PLAYING:
+                timeout = self._clock.seconds_until_next_tick()
+            else:
+                timeout = 0.005
+            self._poll(timeout)
             if self._state is None or self._state.phase != GamePhase.PLAYING:
-                time.sleep(0.005)
                 continue
             if self._clock.should_tick():
                 self._tick()
+                self._poll(0)  # flush broadcast snapshot without blocking
 
     # ── Poll transport ────────────────────────────────────────────────────────
 
-    def _poll(self) -> None:
-        for event in self._transport.poll():
+    def _poll(self, timeout: float = 0) -> None:
+        for event in self._transport.poll(timeout):
             if isinstance(event, ConnectEvent):
                 pass   # wait for JoinMsg
             elif isinstance(event, DisconnectEvent):
@@ -144,7 +152,7 @@ class GameServer:
 
         self._clock.reset()
         self._lobby.broadcast_game_start(state)
-        print(f"Game started with {len(state.players)} players.")
+        print(f"[{_ts()}] Game started with {len(state.players)} players.")
 
     # ── Tick ──────────────────────────────────────────────────────────────────
 
@@ -203,7 +211,7 @@ class GameServer:
                         draw_names=draw_names).encode(),
             CHANNEL_RELIABLE,
         )
-        print(f"Game over. Winner: {winner_name or 'draw'}")
+        print(f"[{_ts()}] Game over. Winner: {winner_name or 'draw'}")
         self._reset_for_new_game()
 
     def _reset_for_new_game(self) -> None:
@@ -213,4 +221,4 @@ class GameServer:
         self._peer_to_player.clear()
         self._player_names.clear()
         self._lobby.reset()
-        print("Server reset. Waiting for players…")
+        print(f"[{_ts()}] Server reset. Waiting for players…")

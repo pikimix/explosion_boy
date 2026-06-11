@@ -28,6 +28,9 @@ class TickClock:
         self._tick += 1
         return self._tick
 
+    def seconds_until_next_tick(self) -> float:
+        return max(0.0, self._last_tick_time + TICK_DT - time.monotonic())
+
     def ticks_for_seconds(self, seconds: float) -> int:
         return max(1, round(seconds / TICK_DT))
 
