@@ -22,6 +22,10 @@ class PowerupKind(IntEnum):
     BLAST_UP         = 2
     SHIELD           = 3
     REVERSE_CONTROLS = 4
+    SPEED_UP         = 5
+    SKULL            = 6
+    SUPER_BOMB       = 7
+    CLUSTER_BOMB     = 8
 
 
 @dataclass
@@ -42,6 +46,9 @@ class PlayerStats:
     blast_radius: int   = 2
     shield: bool        = False
     reversed_controls_ticks: int = 0
+    speed_level:        int  = 0
+    has_super_bomb:     bool = False
+    has_cluster_bomb:   bool = False
 
 
 @dataclass
@@ -56,6 +63,8 @@ class BombComponent:
     py: float
     vx: float = 0.0
     vy: float = 0.0
+    is_super:   bool = False
+    is_cluster: bool = False
 
 
 @dataclass

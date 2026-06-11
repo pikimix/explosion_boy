@@ -30,11 +30,11 @@ def _enc_physics(p: PhysicsState) -> list:
 
 def _enc_stats(s: PlayerStats) -> list:
     return [s.player_id, s.lives, s.bomb_capacity, s.bombs_in_use, s.blast_radius, s.shield,
-            s.reversed_controls_ticks]
+            s.reversed_controls_ticks, s.speed_level, s.has_super_bomb, s.has_cluster_bomb]
 
 def _enc_bomb(b: BombComponent) -> list:
     return [b.owner_id, b.fuse_ticks_remaining, b.blast_radius,
-            b.col, b.row, b.px, b.py, b.vx, b.vy]
+            b.col, b.row, b.px, b.py, b.vx, b.vy, b.is_super, b.is_cluster]
 
 def _enc_exp_center(e: ExplosionCenter) -> list:
     return [e.col, e.row, e.ticks_remaining]

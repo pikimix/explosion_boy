@@ -33,6 +33,7 @@ def process_detonations(
 ) -> None:
     queue: deque[DetonationEvent] = deque(detonations)
     processed_indices: set[int] = set()
+    cluster_origins: list[tuple[int, int, int]] = []
     bomb_by_cell: dict[tuple[int, int], int] = {
         (b.col, b.row): bi for bi, b in enumerate(state.bombs)
     }
@@ -44,55 +45,136 @@ def process_detonations(
         processed_indices.add(det.bomb_idx)
 
         bus.emit(BombDetonatedEvent(det.col, det.row))
-        state.explosions.append(
-            ExplosionCenter(det.col, det.row, EXPLOSION_DURATION_TICKS)
-        )
 
-        for dc, dr in _DIRECTIONS:
-            ray_len = 0
-            for dist in range(1, det.blast_radius + 1):
-                c = det.col + dc * dist
-                r = det.row + dr * dist
+        if det.is_super:
+            _super_bomb_explosion(state, space, det, bus, bomb_by_cell, queue, processed_indices)
+        else:
+            state.explosions.append(
+                ExplosionCenter(det.col, det.row, EXPLOSION_DURATION_TICKS)
+            )
 
-                if r < 0 or r >= state.map_rows or c < 0 or c >= state.map_cols:
-                    break
-                tile = state.tiles[r][c]
+            for dc, dr in _DIRECTIONS:
+                ray_len = 0
+                for dist in range(1, det.blast_radius + 1):
+                    c = det.col + dc * dist
+                    r = det.row + dr * dist
 
-                if tile == TileKind.SOLID_WALL:
-                    break
+                    if r < 0 or r >= state.map_rows or c < 0 or c >= state.map_cols:
+                        break
+                    tile = state.tiles[r][c]
 
-                if tile == TileKind.SOFT_BLOCK:
-                    state.tiles[r][c] = TileKind.EMPTY
-                    state.tiles_dirty = True
-                    bus.emit(SoftBlockDestroyedEvent(c, r))
-                    maybe_drop_powerup(state, c, r)
-                    # Rebuild static walls to remove this block from physics
-                    space.rebuild_static_walls(state.tiles)
+                    if tile == TileKind.SOLID_WALL:
+                        break
+
+                    if tile == TileKind.SOFT_BLOCK:
+                        state.tiles[r][c] = TileKind.EMPTY
+                        state.tiles_dirty = True
+                        bus.emit(SoftBlockDestroyedEvent(c, r))
+                        maybe_drop_powerup(state, c, r)
+                        # Rebuild static walls to remove this block from physics
+                        space.rebuild_static_walls(state.tiles)
+                        ray_len = dist
+                        break
+
+                    # Check for chain-reacting bomb at this cell
+                    bi = bomb_by_cell.get((c, r))
+                    if bi is not None and bi not in processed_indices:
+                        bomb = state.bombs[bi]
+                        queue.append(DetonationEvent(
+                            bomb_idx=bi,
+                            col=bomb.col, row=bomb.row,
+                            blast_radius=bomb.blast_radius,
+                            owner_id=bomb.owner_id,
+                            is_super=bomb.is_super,
+                            is_cluster=bomb.is_cluster,
+                        ))
+
                     ray_len = dist
-                    break
 
-                # Check for chain-reacting bomb at this cell
-                bi = bomb_by_cell.get((c, r))
-                if bi is not None and bi not in processed_indices:
-                    bomb = state.bombs[bi]
-                    queue.append(DetonationEvent(
-                        bomb_idx=bi,
-                        col=bomb.col, row=bomb.row,
-                        blast_radius=bomb.blast_radius,
-                        owner_id=bomb.owner_id,
+                if ray_len > 0:
+                    state.explosion_rays.append(ExplosionRay(
+                        origin_col=det.col, origin_row=det.row,
+                        direction=(dc, dr), length=ray_len,
+                        ticks_remaining=EXPLOSION_DURATION_TICKS,
                     ))
 
-                ray_len = dist
-
-            if ray_len > 0:
-                state.explosion_rays.append(ExplosionRay(
-                    origin_col=det.col, origin_row=det.row,
-                    direction=(dc, dr), length=ray_len,
-                    ticks_remaining=EXPLOSION_DURATION_TICKS,
-                ))
+        if det.is_cluster:
+            cluster_origins.append((det.col, det.row, det.blast_radius))
 
     remove_bombs(state, space, list(processed_indices))
+    if cluster_origins:
+        _spawn_cluster_sub_bombs(state, space, cluster_origins)
     _kill_players_in_explosions(state, bus)
+
+
+def _super_bomb_explosion(
+    state: GameState,
+    space: PhysicsSpace,
+    det: DetonationEvent,
+    bus: EventBus,
+    bomb_by_cell: dict[tuple[int, int], int],
+    queue: deque[DetonationEvent],
+    processed_indices: set[int],
+) -> None:
+    """5×5 AOE explosion that passes through solid walls but still removes soft blocks."""
+    needs_rebuild = False
+    for dr in range(-2, 3):
+        for dc in range(-2, 3):
+            c, r = det.col + dc, det.row + dr
+            if not (0 <= r < state.map_rows and 0 <= c < state.map_cols):
+                continue
+            state.explosions.append(ExplosionCenter(c, r, EXPLOSION_DURATION_TICKS))
+            if state.tiles[r][c] == TileKind.SOFT_BLOCK:
+                state.tiles[r][c] = TileKind.EMPTY
+                state.tiles_dirty = True
+                bus.emit(SoftBlockDestroyedEvent(c, r))
+                maybe_drop_powerup(state, c, r)
+                needs_rebuild = True
+            bi = bomb_by_cell.get((c, r))
+            if bi is not None and bi not in processed_indices and bi != det.bomb_idx:
+                b = state.bombs[bi]
+                queue.append(DetonationEvent(
+                    bomb_idx=bi, col=b.col, row=b.row,
+                    blast_radius=b.blast_radius, owner_id=b.owner_id,
+                    is_super=b.is_super, is_cluster=b.is_cluster,
+                ))
+    if needs_rebuild:
+        space.rebuild_static_walls(state.tiles)
+
+
+def _spawn_cluster_sub_bombs(
+    state: GameState,
+    space: PhysicsSpace,
+    origins: list[tuple[int, int, int]],
+) -> None:
+    """Spawn up to 4 sub-bombs from each cluster origin; sub-bombs don't count toward cap."""
+    from core.components import BombComponent
+    from engine.config import TILE_SIZE
+    from systems.powerup_system import CLUSTER_SUB_FUSE_TICKS
+
+    for col, row, blast_radius in origins:
+        bomb_cells = {(b.col, b.row) for b in state.bombs}
+        for dc, dr in _DIRECTIONS:
+            for dist in range(1, 3):
+                c, r = col + dc * dist, row + dr * dist
+                if not (0 <= r < state.map_rows and 0 <= c < state.map_cols):
+                    break
+                if state.tiles[r][c] != TileKind.EMPTY:
+                    break  # wall or soft block stops placement in this direction
+                if (c, r) in bomb_cells:
+                    continue  # cell occupied — try one step further
+                px = c * TILE_SIZE + TILE_SIZE / 2
+                py = r * TILE_SIZE + TILE_SIZE / 2
+                sub = BombComponent(
+                    owner_id=-1,
+                    fuse_ticks_remaining=CLUSTER_SUB_FUSE_TICKS,
+                    blast_radius=blast_radius,
+                    col=c, row=r, px=px, py=py,
+                )
+                state.bombs.append(sub)
+                space.add_bomb(len(state.bombs) - 1, px, py)
+                bomb_cells.add((c, r))
+                break
 
 
 def tick_explosions(state: GameState, bus: EventBus) -> None:

@@ -30,8 +30,9 @@ def process_movement(
         if mag > 1.0:
             mx, my = mx / mag, my / mag
 
-        vx = mx * MAX_PLAYER_SPEED
-        vy = my * MAX_PLAYER_SPEED
+        speed = MAX_PLAYER_SPEED * (1 + stats.speed_level * 0.3) if stats else MAX_PLAYER_SPEED
+        vx = mx * speed
+        vy = my * speed
         space.set_player_velocity(inp.player_id, vx, vy)
 
     space.step(TICK_DT)
