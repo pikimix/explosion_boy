@@ -70,6 +70,10 @@ class GameScene:
             self._tick_accum -= tick_dt
             self._tick += 1
             self._send_input(self._tick)
+            if self._debug and state:
+                lead = self._tick - state.tick
+                if lead != 0 and self._tick % 20 == 0:
+                    print(f"[client pid={self._client.player_id}] client_tick={self._tick} server_tick={state.tick} lead={lead} (expected {INPUT_LEAD_TICKS})")
 
     def draw(self) -> None:
         state = self._client.get_state()

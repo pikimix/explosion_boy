@@ -22,7 +22,7 @@ class InputBuffer:
         if queue is not None:
             queue.append(inp)
 
-    def drain(self, tick: TickNumber) -> list[PlayerInput]:
+    def drain(self, tick: TickNumber, debug: bool = False) -> list[PlayerInput]:
         """Return one input per registered player for this tick.
 
         Discards any inputs older than `tick` before looking for an exact
@@ -35,5 +35,8 @@ class InputBuffer:
             if queue and queue[0].tick == tick:
                 result.append(queue.popleft())
             else:
+                if debug and tick % 20 == 0:
+                    front = queue[0].tick if queue else "empty"
+                    print(f"[server] tick={tick} pid={pid}: no input (queue front={front})")
                 result.append(neutral_input(pid, tick))
         return result
