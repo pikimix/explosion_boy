@@ -4,7 +4,7 @@ from __future__ import annotations
 import arcade
 
 from core.state import GameState
-from engine.config import PLAYER_COLOURS
+from engine.config import PLAYER_COLOURS, POWERUP_COLOURS, POWERUP_SYMBOLS
 
 HUD_WIDTH = 180.0
 _X = 10.0
@@ -15,8 +15,29 @@ _NAME_H = 18.0
 _STAT_H = 16.0
 _PLAYER_GAP = 8.0
 
+_VOLUME_WIDGET_H = 10 + 10 + 28 + 4 + 6 * 2  # _PADDING + _BAR_H + _LABEL_H + 4 + _BG_PAD*2
+
+_LEGEND_SYMBOL_SIZE = 14
+_LEGEND_LABEL_SIZE = 10
+_LEGEND_H = 16.0
+_LEGEND_LABEL_X = _X + 22.0
+_LEGEND_LABEL = 'POWERUPS:'
+_LEGEND_ENTRIES: list[tuple[str, str, tuple[int, int, int, int]]] = [
+    (POWERUP_SYMBOLS[1], 'Extra bomb',      POWERUP_COLOURS[1]),
+    (POWERUP_SYMBOLS[2], 'Blast up',        POWERUP_COLOURS[2]),
+    (POWERUP_SYMBOLS[3], 'Shield',          POWERUP_COLOURS[3]),
+    (POWERUP_SYMBOLS[4], 'Reverse controls',POWERUP_COLOURS[4]),
+    (POWERUP_SYMBOLS[5], 'Speed up',        POWERUP_COLOURS[5]),
+    (POWERUP_SYMBOLS[6], 'Skull (bad)',     POWERUP_COLOURS[6]),
+    (POWERUP_SYMBOLS[7], 'Super bomb',      POWERUP_COLOURS[7]),
+    (POWERUP_SYMBOLS[8], 'Cluster bomb',    POWERUP_COLOURS[8]),
+]
+
 _name_texts: dict[int, arcade.Text] = {}
 _stat_texts: dict[int, arcade.Text] = {}
+_legend_header: arcade.Text | None = None
+_legend_symbol_texts: list[arcade.Text] = []
+_legend_label_texts: list[arcade.Text] = []
 
 
 def draw(state: GameState) -> None:
@@ -60,3 +81,41 @@ def draw(state: GameState) -> None:
         st.color = colour[:3]
         st.draw()
         y -= _STAT_H + _PLAYER_GAP
+
+    _draw_legend(win)
+
+
+def _draw_legend(win: arcade.Window) -> None:
+    global _legend_header
+    bottom_margin = _VOLUME_WIDGET_H + 8.0
+    total_h = _LEGEND_H + len(_LEGEND_ENTRIES) * _LEGEND_H
+    y = bottom_margin + total_h - _LEGEND_H
+
+    if _legend_header is None:
+        _legend_header = arcade.Text(
+            _LEGEND_LABEL, _X, y,
+            color=(200, 200, 200, 200), font_size=_LEGEND_LABEL_SIZE, bold=True,
+            anchor_x='left', anchor_y='bottom',
+        )
+        row_y = y - _LEGEND_H
+        for symbol, label, colour in _LEGEND_ENTRIES:
+            _legend_symbol_texts.append(arcade.Text(
+                symbol, _X, row_y,
+                color=colour[:3], font_size=_LEGEND_SYMBOL_SIZE,
+                anchor_x='left', anchor_y='bottom',
+            ))
+            _legend_label_texts.append(arcade.Text(
+                label, _LEGEND_LABEL_X, row_y,
+                color=colour[:3], font_size=_LEGEND_LABEL_SIZE,
+                anchor_x='left', anchor_y='bottom',
+            ))
+            row_y -= _LEGEND_H
+
+    _legend_header.draw()
+    row_y = y - _LEGEND_H
+    for sym_t, lbl_t in zip(_legend_symbol_texts, _legend_label_texts):
+        sym_t.y = row_y
+        lbl_t.y = row_y
+        sym_t.draw()
+        lbl_t.draw()
+        row_y -= _LEGEND_H
