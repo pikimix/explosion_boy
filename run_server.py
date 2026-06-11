@@ -14,13 +14,15 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=int(os.environ.get("SERVER_PORT", DEFAULT_PORT)))
     parser.add_argument("--backend", default=os.environ.get("SERVER_BACKEND", "tcp"),
                         help="Transport backend (default: tcp)")
+    parser.add_argument("--debug", action="store_true",
+                        help="Print input-buffer diagnostics each second")
     args = parser.parse_args()
 
     transport = make_server_transport(
         args.backend, host=args.host, port=args.port, max_clients=MAX_PLAYERS
     )
     print(f"Listening on {args.host}:{args.port} [{args.backend}]")
-    GameServer(transport).run()
+    GameServer(transport, debug=args.debug).run()
 
 
 if __name__ == "__main__":

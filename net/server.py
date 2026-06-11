@@ -46,8 +46,9 @@ from systems.powerup_system import process_powerup_pickups, tick_status_effects
 
 
 class GameServer:
-    def __init__(self, transport: ServerTransport) -> None:
+    def __init__(self, transport: ServerTransport, debug: bool = False) -> None:
         self._transport = transport
+        self._debug = debug
         self._clock = TickClock()
         self._state: GameState | None = None
         self._space: PhysicsSpace | None = None
@@ -154,7 +155,7 @@ class GameServer:
         self._last_alive_pids = set(self._state.players.keys())
         tick = self._clock.advance()
         self._state.tick = tick
-        inputs = self._input_buffer.drain(tick)
+        inputs = self._input_buffer.drain(tick, debug=self._debug)
 
         process_movement(self._state, self._space, inputs)
         sync_grid_positions(self._state)

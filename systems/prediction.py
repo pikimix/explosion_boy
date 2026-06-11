@@ -12,7 +12,6 @@ On server state receipt:
 """
 from __future__ import annotations
 
-import copy
 from collections import deque
 
 from core.components import PlayerInput, PhysicsState
@@ -30,6 +29,7 @@ class PredictionEngine:
         self._predicted_x: float = 0.0
         self._predicted_y: float = 0.0
         self._confirmed_state: GameState | None = None
+        self._tile_soft_block_count: int = -1  # soft block count from last reconcile
 
     # ── Called by game_scene when a new input is generated ────────────────────
 
@@ -81,9 +81,22 @@ class PredictionEngine:
     # ── Internal helpers ──────────────────────────────────────────────────────
 
     def _rebuild_space(self, state: GameState) -> None:
-        self._space = PhysicsSpace()
-        # Static tile walls (EMPTY == 0, everything else is solid)
-        self._space.rebuild_static_walls(state.tiles)
+        # Tiles only change when soft blocks are destroyed. Rebuilding 500+ pymunk
+        # wall shapes every frame is the main source of cross-client input latency.
+        soft_count = sum(
+            1 for row in state.tiles for cell in row
+            if int(cell) == 2  # TileKind.SOFT_BLOCK
+        )
+        if soft_count != self._tile_soft_block_count:
+            self._space = PhysicsSpace()
+            self._space.rebuild_static_walls(state.tiles)
+            self._tile_soft_block_count = soft_count
+        else:
+            # Reuse existing static geometry — remove only the dynamic bodies.
+            self._space.remove_player(self._pid)
+            for i in list(self._space.bomb_indices()):
+                self._space.remove_bomb(i)
+
         # Bomb shapes (for push interaction)
         for i, bomb in enumerate(state.bombs):
             self._space.add_bomb(i, bomb.px, bomb.py)
