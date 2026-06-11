@@ -135,6 +135,7 @@ class DualServerTransport:
         self._max_clients = max_clients
         self._peers: dict[UUID, _TcpPeer] = {}
         self._udp_index: dict[tuple[str, int], UUID] = {}  # addr → peer_id
+        self._sock_index: dict[int, _TcpPeer] = {}         # fileno → peer for O(1) lookup
 
         self._tcp_listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._tcp_listen.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -147,11 +148,12 @@ class DualServerTransport:
         self._udp_sock.setblocking(False)
         self._udp_sock.bind((host, port))
 
-    def poll(self) -> list[TransportEvent]:
+        self._select_list: list[socket.socket] = [self._tcp_listen, self._udp_sock]
+
+    def poll(self, timeout: float = 0) -> list[TransportEvent]:
         events: list[TransportEvent] = []
 
-        tcp_socks = [self._tcp_listen] + [p.sock for p in self._peers.values()]
-        readable, _, _ = select.select(tcp_socks + [self._udp_sock], [], [], 0)
+        readable, _, _ = select.select(self._select_list, [], [], timeout)
 
         for sock in readable:
             if sock is self._tcp_listen:
@@ -203,6 +205,7 @@ class DualServerTransport:
             peer.close()
         self._peers.clear()
         self._udp_index.clear()
+        self._sock_index.clear()
         try:
             self._tcp_listen.close()
         except OSError:
@@ -221,15 +224,18 @@ class DualServerTransport:
             conn.close()
             return
         conn.setblocking(False)
+        conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         pid = uuid4()
         peer = _TcpPeer(conn, pid)
         self._peers[pid] = peer
+        self._sock_index[conn.fileno()] = peer
+        self._select_list.append(conn)
         peer.queue_send(pid.bytes, _CHANNEL_UDP_TOKEN)
         events.append(ConnectEvent(pid))
 
     def _recv_tcp(self, sock: socket.socket,
                   events: list[TransportEvent]) -> None:
-        peer = next((p for p in self._peers.values() if p.sock is sock), None)
+        peer = self._sock_index.get(sock.fileno())
         if peer is None:
             return
         messages = peer.read()
@@ -273,6 +279,10 @@ class DualServerTransport:
         if peer:
             if peer.udp_addr:
                 self._udp_index.pop(peer.udp_addr, None)
+            self._sock_index.pop(peer.sock.fileno(), None)
+            self._select_list = (
+                [self._tcp_listen] + [p.sock for p in self._peers.values()] + [self._udp_sock]
+            )
             peer.close()
             events.append(DisconnectEvent(peer_id))
 
@@ -295,6 +305,7 @@ class DualClientTransport:
 
         self._tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._tcp_sock.setblocking(False)
+        self._tcp_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self._tcp_recv_buf = _RecvBuffer()
         self._tcp_send_queue: deque[bytes] = deque()
 
@@ -310,12 +321,12 @@ class DualClientTransport:
     def connected(self) -> bool:
         return self._connected
 
-    def poll(self) -> list[TransportEvent]:
+    def poll(self, timeout: float = 0) -> list[TransportEvent]:
         events: list[TransportEvent] = []
 
         if self._connecting:
             _, writable, exceptional = select.select(
-                [], [self._tcp_sock], [self._tcp_sock], 0
+                [], [self._tcp_sock], [self._tcp_sock], timeout
             )
             if exceptional:
                 self._connecting = False
@@ -334,10 +345,21 @@ class DualClientTransport:
         if not self._connected:
             return events
 
+        # Flush outbound data before blocking so inputs sent last iteration go out now
+        if not self._flush_tcp():
+            self._connected = False
+            events.append(DisconnectEvent(self._local_id))
+            return events
+
         read_socks = [self._tcp_sock]
         if self._peer_uuid is not None:
             read_socks.append(self._udp_sock)
-        readable, _, _ = select.select(read_socks, [], [], 0)
+        try:
+            readable, _, _ = select.select(read_socks, [], [], timeout)
+        except OSError:
+            self._connected = False
+            events.append(DisconnectEvent(self._local_id))
+            return events
 
         for sock in readable:
             if sock is self._tcp_sock:

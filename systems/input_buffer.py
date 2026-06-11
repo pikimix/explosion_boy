@@ -2,8 +2,13 @@
 from __future__ import annotations
 
 from collections import deque
+from datetime import datetime
 
 from core.components import PlayerInput, neutral_input
+
+
+def _ts() -> str:
+    return datetime.now().strftime('%H:%M:%S.%f')[:-3]
 from core.tick import TickNumber
 
 
@@ -37,6 +42,6 @@ class InputBuffer:
             else:
                 if debug and tick % 20 == 0:
                     front = queue[0].tick if queue else "empty"
-                    print(f"[server] tick={tick} pid={pid}: no input (queue front={front})")
+                    print(f"[{_ts()}] [server] tick={tick} pid={pid}: no input (queue front={front})")
                 result.append(neutral_input(pid, tick))
         return result

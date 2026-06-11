@@ -17,8 +17,8 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--name", default="Player")
-    parser.add_argument("--backend", default="tcp",
-                        help="Transport backend (default: tcp)")
+    parser.add_argument("--backend", default="dual",
+                        help="Transport backend (default: dual)")
     parser.add_argument("--no-shader", action="store_true",
                         help="Disable GLSL particle effects")
     parser.add_argument("--debug", action="store_true",

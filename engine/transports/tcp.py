@@ -109,18 +109,18 @@ class TCPServerTransport:
                  max_clients: int = 16) -> None:
         self._max_clients = max_clients
         self._peers: dict[UUID, _Peer] = {}
+        self._sock_index: dict[int, _Peer] = {}   # fileno → peer for O(1) lookup
         self._listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._listen.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._listen.setblocking(False)
         self._listen.bind((host, port))
         self._listen.listen(max_clients)
+        self._select_list: list[socket.socket] = [self._listen]
 
-    def poll(self) -> list[TransportEvent]:
+    def poll(self, timeout: float = 0) -> list[TransportEvent]:
         events: list[TransportEvent] = []
 
-        readable, _, _ = select.select(
-            [self._listen] + [p.sock for p in self._peers.values()], [], [], 0
-        )
+        readable, _, _ = select.select(self._select_list, [], [], timeout)
 
         for sock in readable:
             if sock is self._listen:
@@ -157,6 +157,7 @@ class TCPServerTransport:
         for peer in list(self._peers.values()):
             peer.close()
         self._peers.clear()
+        self._sock_index.clear()
         try:
             self._listen.close()
         except OSError:
@@ -171,13 +172,17 @@ class TCPServerTransport:
             conn.close()
             return
         conn.setblocking(False)
+        conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         pid = uuid4()
-        self._peers[pid] = _Peer(conn, pid)
+        peer = _Peer(conn, pid)
+        self._peers[pid] = peer
+        self._sock_index[conn.fileno()] = peer
+        self._select_list.append(conn)
         events.append(ConnectEvent(pid))
 
     def _recv_from(self, sock: socket.socket,
                    events: list[TransportEvent]) -> None:
-        peer = next((p for p in self._peers.values() if p.sock is sock), None)
+        peer = self._sock_index.get(sock.fileno())
         if peer is None:
             return
         messages = peer.read()
@@ -190,6 +195,8 @@ class TCPServerTransport:
     def _drop(self, peer_id: UUID, events: list[TransportEvent]) -> None:
         peer = self._peers.pop(peer_id, None)
         if peer:
+            self._sock_index.pop(peer.sock.fileno(), None)
+            self._select_list = [self._listen] + [p.sock for p in self._peers.values()]
             peer.close()
             events.append(DisconnectEvent(peer_id))
 
@@ -200,6 +207,7 @@ class TCPClientTransport:
     def __init__(self, host: str = "127.0.0.1", port: int = 9000) -> None:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.setblocking(False)
+        self._sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self._peer = _Peer(self._sock, uuid4())
         self._connected = False
         self._connecting = True
@@ -212,12 +220,12 @@ class TCPClientTransport:
     def connected(self) -> bool:
         return self._connected
 
-    def poll(self) -> list[TransportEvent]:
+    def poll(self, timeout: float = 0) -> list[TransportEvent]:
         events: list[TransportEvent] = []
 
         if self._connecting:
             _, writable, exceptional = select.select(
-                [], [self._sock], [self._sock], 0
+                [], [self._sock], [self._sock], timeout
             )
             if exceptional:
                 self._connecting = False
@@ -236,7 +244,19 @@ class TCPClientTransport:
         if not self._connected:
             return events
 
-        readable, _, _ = select.select([self._sock], [], [], 0)
+        # Flush outbound data before blocking so inputs sent last iteration go out now
+        if not self._peer.flush():
+            self._connected = False
+            events.append(DisconnectEvent(self._peer.peer_id))
+            return events
+
+        try:
+            readable, _, _ = select.select([self._sock], [], [], timeout)
+        except OSError:
+            self._connected = False
+            events.append(DisconnectEvent(self._peer.peer_id))
+            return events
+
         if readable:
             messages = self._peer.read()
             if messages is None:

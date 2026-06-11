@@ -14,7 +14,6 @@ The net thread:
 from __future__ import annotations
 
 import threading
-import time
 from collections import deque
 from typing import Callable
 
@@ -87,38 +86,41 @@ class GameClient:
     # ── Net thread ────────────────────────────────────────────────────────────
 
     def _net_loop(self) -> None:
+        from engine.transport import ReceiveEvent, DisconnectEvent
         while self._running:
-            events = self._transport.poll()
+            events = self._transport.poll(timeout=0.05)
+
+            # Scan for the newest snapshot without decoding all of them
+            latest_state_msg: StateUpdateMsg | None = None
             for event in events:
-                from engine.transport import ReceiveEvent, DisconnectEvent
                 if isinstance(event, ReceiveEvent):
-                    self._handle_data(event.data)
+                    msg = decode_any(event.data)
+                    if msg is None:
+                        continue
+                    if isinstance(msg, StateUpdateMsg):
+                        if msg.tick > self._last_state_tick and (
+                                latest_state_msg is None or msg.tick > latest_state_msg.tick):
+                            latest_state_msg = msg
+                    else:
+                        self._handle_msg(msg)
                 elif isinstance(event, DisconnectEvent):
                     self._running = False
+
+            # Decode only the latest snapshot (one msgpack unpack instead of N)
+            if latest_state_msg is not None:
+                state = latest_state_msg.get_state()
+                with self._lock:
+                    self._last_state = state
+                    self._last_state_tick = latest_state_msg.tick
 
             # Drain and send pending inputs
             while self._pending_inputs:
                 inp = self._pending_inputs.popleft()
                 self._transport.send(inp.encode(), CHANNEL_RELIABLE)
 
-            time.sleep(0.001)
-
-    def _handle_data(self, data: bytes) -> None:
-        msg = decode_any(data)
-        if msg is None:
-            return
-
+    def _handle_msg(self, msg: AnyMsg) -> None:
         if isinstance(msg, WelcomeMsg):
             self._player_id = msg.assigned_player_id
-
-        elif isinstance(msg, StateUpdateMsg):
-            # Only update if this snapshot is newer than what we have
-            if msg.tick > self._last_state_tick:
-                state = msg.get_state()
-                with self._lock:
-                    self._last_state = state
-                    self._last_state_tick = msg.tick
-
         elif isinstance(msg, (GameStartMsg, LobbyUpdateMsg, GameOverMsg)):
             self._message_queue.append(msg)
             if isinstance(msg, GameStartMsg):
