@@ -63,8 +63,8 @@ POWERUP_SYMBOLS: dict[int, str] = {
     4: '?',    # REVERSE_CONTROLS
     5: '⚡',  # SPEED_UP      (⚡)
     6: '☠',  # SKULL         (☠)
-    7: '★',  # SUPER_BOMB    (★)
-    8: '#',    # CLUSTER_BOMB
+    7: '☢',   # SUPER_BOMB    (☢)
+    8: '🎇',  # CLUSTER_BOMB  (🎇)
     9: '\U0001faa8',  # RUBBLE_BOMB   (🪨)
 }
 
