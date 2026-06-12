@@ -26,12 +26,13 @@ _LEGEND_ENTRIES: list[tuple[str, str, tuple[int, int, int, int]]] = [
     (POWERUP_SYMBOLS[1], 'Extra bomb',      POWERUP_COLOURS[1]),
     (POWERUP_SYMBOLS[2], 'Blast up',        POWERUP_COLOURS[2]),
     (POWERUP_SYMBOLS[3], 'Shield',          POWERUP_COLOURS[3]),
-    (POWERUP_SYMBOLS[4], 'Reverse controls',POWERUP_COLOURS[4]),
-    (POWERUP_SYMBOLS[5], 'Speed up',        POWERUP_COLOURS[5]),
-    (POWERUP_SYMBOLS[6], 'Skull (bad)',     POWERUP_COLOURS[6]),
-    (POWERUP_SYMBOLS[7], 'Super bomb',      POWERUP_COLOURS[7]),
-    (POWERUP_SYMBOLS[8], 'Cluster bomb',    POWERUP_COLOURS[8]),
-    (POWERUP_SYMBOLS[9], 'Rubble bomb',     POWERUP_COLOURS[9]),
+    (POWERUP_SYMBOLS[4],  'Dizzy others',     POWERUP_COLOURS[4]),
+    (POWERUP_SYMBOLS[5],  'Speed up',         POWERUP_COLOURS[5]),
+    (POWERUP_SYMBOLS[6],  'Skull (bad)',      POWERUP_COLOURS[6]),
+    (POWERUP_SYMBOLS[7],  'Super bomb',       POWERUP_COLOURS[7]),
+    (POWERUP_SYMBOLS[8],  'Cluster bomb',     POWERUP_COLOURS[8]),
+    (POWERUP_SYMBOLS[9],  'Rubble bomb',      POWERUP_COLOURS[9]),
+    (POWERUP_SYMBOLS[10], 'Dizzy (self)',     POWERUP_COLOURS[10]),
 ]
 
 _name_texts: dict[int, arcade.Text] = {}
