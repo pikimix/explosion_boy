@@ -31,6 +31,10 @@ _NAME_H = 17.0
 _STATUS_H = 15.0
 _PLAYER_GAP = 8.0
 
+_NAME_BOX_Y = 172.0       # centre y of the editable name input box
+_NAME_BOX_H = 20.0
+_MAX_NAME_LEN = 16
+
 # Colour picker popup dimensions
 _WHEEL_SIZE = 200         # diameter of the HSV wheel in pixels
 _POPUP_W = 280
@@ -97,12 +101,12 @@ class LobbyScene:
             anchor_x='left', anchor_y='top',
         )
         self._your_colour_text = arcade.Text(
-            'Your colour', _HUD_X, 188,
+            'Your colour', _HUD_X, 146,
             color=(200, 200, 200), font_size=10,
             anchor_x='left', anchor_y='bottom',
         )
         self._swatch_label_text = arcade.Text(
-            'click to change', swatch_cx, 172,
+            'click to change', swatch_cx, 130,
             color=(255, 255, 255, 160), font_size=9,
             anchor_x='center', anchor_y='center',
         )
@@ -129,6 +133,22 @@ class LobbyScene:
         )
         self._hud_name_texts: list[arcade.Text] = []
         self._hud_status_texts: list[arcade.Text] = []
+
+        # Name editing state
+        self._editing_name = False
+        self._name_draft = player_name
+        self._cursor_blink = 0.0
+
+        self._your_name_label_text = arcade.Text(
+            'Your name', _HUD_X, _NAME_BOX_Y + _NAME_BOX_H / 2 + 4,
+            color=(200, 200, 200), font_size=10,
+            anchor_x='left', anchor_y='bottom',
+        )
+        self._name_input_text = arcade.Text(
+            player_name, _HUD_X + 4, _NAME_BOX_Y,
+            color=(255, 255, 255), font_size=11,
+            anchor_x='left', anchor_y='center',
+        )
 
         client.send_join(player_name)
 
@@ -187,12 +207,24 @@ class LobbyScene:
                 if not (popup_cx - _POPUP_W / 2 <= x <= popup_cx + _POPUP_W / 2
                         and popup_cy - _POPUP_H / 2 <= y <= popup_cy + _POPUP_H / 2):
                     self._picker_open = False
-        else:
+            return
+
+        swatch_w = HUD_WIDTH - _HUD_X * 2
+        name_box_bottom = _NAME_BOX_Y - _NAME_BOX_H / 2
+        name_box_top = _NAME_BOX_Y + _NAME_BOX_H / 2
+        if _HUD_X <= x <= _HUD_X + swatch_w and name_box_bottom <= y <= name_box_top:
+            # Activate name editing
+            if not self._editing_name:
+                self._name_draft = self._player_name
+                self._cursor_blink = 0.0
+            self._editing_name = True
+        elif self._editing_name:
+            # Click outside name box while editing → confirm
+            self._confirm_rename()
+        elif _HUD_X <= x <= _HUD_X + swatch_w and 118 <= y <= 142:
             # Click on the HUD colour swatch to open picker
-            swatch_w = HUD_WIDTH - _HUD_X * 2
-            if (_HUD_X <= x <= _HUD_X + swatch_w and 160 <= y <= 184):
-                self._ensure_wheel()
-                self._picker_open = True
+            self._ensure_wheel()
+            self._picker_open = True
 
     def on_mouse_drag(
         self, x: float, y: float, _dx: float, _dy: float, buttons: int, _modifiers: int
@@ -262,6 +294,7 @@ class LobbyScene:
     # ── Network ───────────────────────────────────────────────────────────────
 
     def update(self, dt: float) -> None:
+        self._cursor_blink = (self._cursor_blink + dt) % 1.0
         for msg in self._client.poll_messages():
             if isinstance(msg, LobbyUpdateMsg):
                 self._players = msg.players
@@ -347,24 +380,43 @@ class LobbyScene:
 
         volume_widget.draw(self._volume)
 
-        # Colour swatch button
+        # Name input box
         swatch_w = HUD_WIDTH - _HUD_X * 2
         swatch_cx = _HUD_X + swatch_w / 2
+        self._your_name_label_text.draw()
+        box_border = (100, 180, 255, 200) if self._editing_name else (140, 140, 140, 160)
+        arcade.draw_rect_filled(
+            arcade.XYWH(swatch_cx, _NAME_BOX_Y, swatch_w, _NAME_BOX_H),
+            (40, 40, 40, 200),
+        )
+        arcade.draw_rect_outline(
+            arcade.XYWH(swatch_cx, _NAME_BOX_Y, swatch_w, _NAME_BOX_H),
+            box_border, 1,
+        )
+        display = self._name_draft if self._editing_name else self._player_name
+        cursor = '|' if (self._editing_name and self._cursor_blink < 0.5) else ''
+        self._name_input_text.text = display + cursor
+        self._name_input_text.draw()
+
+        # Colour swatch button
         self._your_colour_text.draw()
         arcade.draw_rect_filled(
-            arcade.XYWH(swatch_cx, 172, swatch_w, 24),
+            arcade.XYWH(swatch_cx, 130, swatch_w, 24),
             (*self._colour_rgb, 255),
         )
         arcade.draw_rect_outline(
-            arcade.XYWH(swatch_cx, 172, swatch_w, 24),
+            arcade.XYWH(swatch_cx, 130, swatch_w, 24),
             (255, 255, 255, 120), 1,
         )
         brightness = sum(self._colour_rgb) / (255 * 3)
         self._swatch_label_text.color = (0, 0, 0, 160) if brightness > 0.5 else (255, 255, 255, 160)
         self._swatch_label_text.draw()
 
-        # Space-to-ready hint
-        if self._ready:
+        # Space-to-ready / name-edit hint
+        if self._editing_name:
+            self._hint_text.text = 'Press ENTER to\nconfirm name'
+            self._hint_text.color = (100, 180, 255)
+        elif self._ready:
             self._hint_text.text = 'Ready!\nWaiting for\nothers…'
             self._hint_text.color = (100, 220, 100)
         else:
@@ -443,7 +495,33 @@ class LobbyScene:
         self._waiting_text.x = play_cx
         self._waiting_text.y = height / 2
 
+    def on_text(self, text: str) -> None:
+        if not self._editing_name:
+            return
+        for ch in text:
+            if ch.isprintable() and len(self._name_draft) < _MAX_NAME_LEN:
+                self._name_draft += ch
+                self._cursor_blink = 0.0
+
+    def _confirm_rename(self) -> None:
+        self._editing_name = False
+        stripped = self._name_draft.strip()
+        if stripped and stripped != self._player_name:
+            self._player_name = stripped
+            self._client.send_rename(stripped)
+
     def on_key_press(self, key: int, modifiers: int) -> None:
+        if self._editing_name:
+            if key == arcade.key.BACKSPACE:
+                self._name_draft = self._name_draft[:-1]
+                self._cursor_blink = 0.0
+            elif key in (arcade.key.RETURN, arcade.key.ENTER):
+                self._confirm_rename()
+            elif key == arcade.key.ESCAPE:
+                self._editing_name = False
+                self._name_draft = self._player_name
+            return
+
         if key == arcade.key.ESCAPE and self._picker_open:
             self._picker_open = False
         elif key == arcade.key.SPACE:

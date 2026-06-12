@@ -53,6 +53,19 @@ class ColourMsg:
 
 
 @dataclass
+class RenameMsg:
+    new_name: str
+    TYPE: str = 'rename'
+
+    def encode(self) -> bytes:
+        return encode_msg({'type': self.TYPE, 'name': self.new_name})
+
+    @staticmethod
+    def decode(d: dict) -> 'RenameMsg':
+        return RenameMsg(new_name=d['name'])
+
+
+@dataclass
 class InputMsg:
     player_id: int
     tick: int
@@ -161,13 +174,14 @@ class GameOverMsg:
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
-AnyMsg = (JoinMsg | ReadyMsg | ColourMsg | InputMsg | WelcomeMsg | LobbyUpdateMsg
+AnyMsg = (JoinMsg | ReadyMsg | ColourMsg | RenameMsg | InputMsg | WelcomeMsg | LobbyUpdateMsg
           | GameStartMsg | StateUpdateMsg | GameOverMsg)
 
 _DECODERS = {
     "join":         JoinMsg.decode,
     "ready":        lambda d: ReadyMsg(ready=d.get("ready", True)),
     "colour":       ColourMsg.decode,
+    "rename":       RenameMsg.decode,
     "input":        InputMsg.decode,
     "welcome":      WelcomeMsg.decode,
     "lobby_update": LobbyUpdateMsg.decode,

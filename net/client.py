@@ -27,6 +27,7 @@ from net.protocol import (
     JoinMsg,
     LobbyUpdateMsg,
     ReadyMsg,
+    RenameMsg,
     StateUpdateMsg,
     WelcomeMsg,
     decode_any,
@@ -82,6 +83,10 @@ class GameClient:
 
     def send_colour(self, colour_rgb: tuple[int, int, int]) -> None:
         self._transport.send(ColourMsg(colour_rgb=colour_rgb).encode(), CHANNEL_RELIABLE)
+
+    def send_rename(self, new_name: str) -> None:
+        self._player_name = new_name
+        self._transport.send(RenameMsg(new_name=new_name).encode(), CHANNEL_RELIABLE)
 
     def poll_messages(self) -> list[AnyMsg]:
         msgs: list[AnyMsg] = []

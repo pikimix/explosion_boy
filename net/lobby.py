@@ -57,6 +57,13 @@ class LobbyManager:
             player.colour_rgb = colour_rgb
             self._broadcast_lobby()
 
+    def on_rename(self, peer_id: UUID, new_name: str) -> None:
+        if player := self._players.get(peer_id):
+            stripped = new_name.strip()[:16]
+            if stripped:
+                player.name = stripped
+                self._broadcast_lobby()
+
     def on_disconnect(self, peer_id: UUID) -> None:
         self._players.pop(peer_id, None)
         self._broadcast_lobby()

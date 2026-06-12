@@ -42,6 +42,10 @@ class GameWindow(arcade.Window):
         if self._scene_manager:
             self._scene_manager.on_mouse_drag(x, y, dx, dy, buttons, modifiers)
 
+    def on_text(self, text: str) -> None:
+        if self._scene_manager:
+            self._scene_manager.on_text(text)
+
     def on_resize(self, width: int, height: int) -> None:
         super().on_resize(width, height)
         if self._scene_manager:

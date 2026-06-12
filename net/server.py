@@ -24,6 +24,7 @@ from net.protocol import (
     InputMsg,
     JoinMsg,
     ReadyMsg,
+    RenameMsg,
     StateUpdateMsg,
     decode_any,
 )
@@ -120,6 +121,14 @@ class GameServer:
 
         elif isinstance(msg, ColourMsg):
             self._lobby.on_colour(peer_id, msg.colour_rgb)
+
+        elif isinstance(msg, RenameMsg):
+            self._lobby.on_rename(peer_id, msg.new_name)
+            pid = self._peer_to_player.get(peer_id)
+            if pid is not None:
+                stripped = msg.new_name.strip()[:16]
+                if stripped:
+                    self._player_names[pid] = stripped
 
         elif isinstance(msg, InputMsg):
             if self._state and self._state.phase == GamePhase.PLAYING:
