@@ -9,10 +9,25 @@ from engine.config import SOFT_BLOCK_DROP_CHANCE
 from systems.collision import px_to_grid
 
 
+_POWERUP_WEIGHTS: dict[PowerupKind, int] = {
+    PowerupKind.EXTRA_BOMB:       10,
+    PowerupKind.BLAST_UP:         10,
+    PowerupKind.SPEED_UP:         10,
+    PowerupKind.SHIELD:            6,
+    PowerupKind.REVERSE_CONTROLS:  3,
+    PowerupKind.SKULL:             1,
+    PowerupKind.SUPER_BOMB:        5,
+    PowerupKind.CLUSTER_BOMB:      5,
+}
+
+_POWERUP_POPULATION = list(_POWERUP_WEIGHTS.keys())
+_POWERUP_CUMULATIVE = list(_POWERUP_WEIGHTS.values())
+
+
 def maybe_drop_powerup(state: GameState, col: int, row: int) -> None:
     if random.random() >= SOFT_BLOCK_DROP_CHANCE:
         return
-    kind = random.choice(list(PowerupKind))
+    kind = random.choices(_POWERUP_POPULATION, weights=_POWERUP_CUMULATIVE, k=1)[0]
     state.powerups.append(PowerupComponent(kind=kind, col=col, row=row))
 
 
