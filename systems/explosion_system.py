@@ -1,6 +1,7 @@
 """Explosion propagation, chain reactions, player kills, and soft block destruction."""
 from __future__ import annotations
 
+import random
 from collections import deque
 
 from core.components import (
@@ -46,7 +47,9 @@ def process_detonations(
 
         bus.emit(BombDetonatedEvent(det.col, det.row))
 
-        if det.is_super:
+        if det.is_rubble:
+            _rubble_bomb_explosion(state, space, det, bus, bomb_by_cell, queue, processed_indices)
+        elif det.is_super:
             _super_bomb_explosion(state, space, det, bus, bomb_by_cell, queue, processed_indices)
         else:
             state.explosions.append(
@@ -87,6 +90,7 @@ def process_detonations(
                             owner_id=bomb.owner_id,
                             is_super=bomb.is_super,
                             is_cluster=bomb.is_cluster,
+                            is_rubble=bomb.is_rubble,
                         ))
 
                     ray_len = dist
@@ -137,8 +141,61 @@ def _super_bomb_explosion(
                 queue.append(DetonationEvent(
                     bomb_idx=bi, col=b.col, row=b.row,
                     blast_radius=b.blast_radius, owner_id=b.owner_id,
-                    is_super=b.is_super, is_cluster=b.is_cluster,
+                    is_super=b.is_super, is_cluster=b.is_cluster, is_rubble=b.is_rubble,
                 ))
+    if needs_rebuild:
+        space.rebuild_static_walls(state.tiles)
+
+
+def _rubble_bomb_explosion(
+    state: GameState,
+    space: PhysicsSpace,
+    det: DetonationEvent,
+    bus: EventBus,
+    bomb_by_cell: dict[tuple[int, int], int],
+    queue: deque[DetonationEvent],
+    processed_indices: set[int],
+) -> None:
+    """AOE explosion like super bomb, then scatters soft blocks on empty cells (1-in-5 chance)."""
+    needs_rebuild = False
+    half = max(2, det.blast_radius // 2)
+    affected: list[tuple[int, int]] = []
+
+    for dr in range(-half, half + 1):
+        for dc in range(-half, half + 1):
+            c, r = det.col + dc, det.row + dr
+            if not (0 <= r < state.map_rows and 0 <= c < state.map_cols):
+                continue
+            affected.append((c, r))
+            state.explosions.append(ExplosionCenter(c, r, EXPLOSION_DURATION_TICKS))
+            if state.tiles[r][c] == TileKind.SOFT_BLOCK:
+                state.tiles[r][c] = TileKind.EMPTY
+                state.tiles_dirty = True
+                bus.emit(SoftBlockDestroyedEvent(c, r))
+                maybe_drop_powerup(state, c, r)
+                needs_rebuild = True
+            bi = bomb_by_cell.get((c, r))
+            if bi is not None and bi not in processed_indices and bi != det.bomb_idx:
+                b = state.bombs[bi]
+                queue.append(DetonationEvent(
+                    bomb_idx=bi, col=b.col, row=b.row,
+                    blast_radius=b.blast_radius, owner_id=b.owner_id,
+                    is_super=b.is_super, is_cluster=b.is_cluster, is_rubble=b.is_rubble,
+                ))
+
+    # Scatter new soft blocks on empty cells within the AOE (1-in-5 chance each)
+    player_cells = {
+        (int(phys.x // TILE_SIZE), int(phys.y // TILE_SIZE))
+        for phys in state.player_physics.values()
+    }
+    bomb_cells = {(b.col, b.row) for b in state.bombs}
+    for c, r in affected:
+        if state.tiles[r][c] == TileKind.EMPTY and (c, r) not in player_cells and (c, r) not in bomb_cells:
+            if random.random() < 0.2:
+                state.tiles[r][c] = TileKind.SOFT_BLOCK
+                state.tiles_dirty = True
+                needs_rebuild = True
+
     if needs_rebuild:
         space.rebuild_static_walls(state.tiles)
 

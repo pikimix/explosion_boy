@@ -26,6 +26,7 @@ class PowerupKind(IntEnum):
     SKULL            = 6
     SUPER_BOMB       = 7
     CLUSTER_BOMB     = 8
+    RUBBLE_BOMB      = 9
 
 
 @dataclass
@@ -49,6 +50,7 @@ class PlayerStats:
     speed_level:        int  = 0
     has_super_bomb:     bool = False
     has_cluster_bomb:   bool = False
+    has_rubble_bomb:    bool = False
     shield_invincibility_ticks: int = 0
 
 
@@ -66,6 +68,7 @@ class BombComponent:
     vy: float = 0.0
     is_super:   bool = False
     is_cluster: bool = False
+    is_rubble:  bool = False
 
 
 @dataclass

@@ -31,6 +31,7 @@ _LEGEND_ENTRIES: list[tuple[str, str, tuple[int, int, int, int]]] = [
     (POWERUP_SYMBOLS[6], 'Skull (bad)',     POWERUP_COLOURS[6]),
     (POWERUP_SYMBOLS[7], 'Super bomb',      POWERUP_COLOURS[7]),
     (POWERUP_SYMBOLS[8], 'Cluster bomb',    POWERUP_COLOURS[8]),
+    (POWERUP_SYMBOLS[9], 'Rubble bomb',     POWERUP_COLOURS[9]),
 ]
 
 _name_texts: dict[int, arcade.Text] = {}
@@ -68,6 +69,7 @@ def draw(state: GameState) -> None:
             + ('  \U0001f635' if stats.reversed_controls_ticks > 0 else '')
             + ('  \U0001f4a5S' if stats.has_super_bomb else '')
             + ('  \U0001f4a5C' if stats.has_cluster_bomb else '')
+            + ('  \U0001f4a5R' if stats.has_rubble_bomb else '')
         )
         if pid not in _stat_texts:
             _stat_texts[pid] = arcade.Text(
