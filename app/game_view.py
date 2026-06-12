@@ -18,10 +18,10 @@ from arcade.sprite.animated import TextureKeyframe
 from app.particle_system import ExplosionParticleSystem
 from app.ui import hud, speed_widget, volume_widget
 from app.ui.hud import HUD_WIDTH
-from core.components import TileKind
+from core.components import PowerupKind, TileKind
 from core.state import GameState
 from engine.config import (
-    BOMB_BASE_COLOUR, BOMB_FUSE_TICKS, BOMB_PULSE_COLOUR, EMPTY_TILE_COLOUR,
+    BOMB_FUSE_TICKS, BOMB_PULSE_COLOUR, EMPTY_TILE_COLOUR,
     EXPLOSION_COLOUR, GRID_COLS, GRID_ROWS, PLAYER_COLOURS, POWERUP_COLOURS,
     POWERUP_SYMBOLS, SOFT_BLOCK_COLOUR, SOLID_WALL_COLOUR, TILE_SIZE, WINDOW_H, WINDOW_W,
 )
@@ -52,6 +52,20 @@ class GameView:
         self._anim_last_time: float = 0.0
         self._last_frame_time: float = 0.0
         self._particles = ExplosionParticleSystem()
+        self._bomb_texts: dict[str, arcade.Text] = {
+            emoji: arcade.Text(
+                emoji, 0, 0,
+                color=arcade.color.WHITE,
+                font_size=self._BOMB_FONT_SIZE,
+                anchor_x='center', anchor_y='center',
+            )
+            for emoji in (
+                self._BOMB_EMOJI,
+                POWERUP_SYMBOLS[PowerupKind.SUPER_BOMB],
+                POWERUP_SYMBOLS[PowerupKind.CLUSTER_BOMB],
+                POWERUP_SYMBOLS[PowerupKind.RUBBLE_BOMB],
+            )
+        }
         self._powerup_texts: dict[int, arcade.Text] = {
             kind: arcade.Text(
                 symbol, 0, 0,
@@ -127,6 +141,9 @@ class GameView:
 
     # ── Other elements ────────────────────────────────────────────────────────
 
+    _BOMB_EMOJI = '\U0001f4a3'         # 💣  normal (not a powerup, no POWERUP_SYMBOLS entry)
+    _BOMB_FONT_SIZE = int(TILE_SIZE * 0.55)
+
     def _draw_bombs(self, state: GameState) -> None:
         now = time.monotonic()
         active_keys: set[tuple[int, int]] = set()
@@ -141,10 +158,23 @@ class GameView:
             freq = 1.0 + (1.0 - fuse_ratio) * 5.0
             # -cos so each bomb always starts dark (0) and immediately rises
             pulse = (-math.cos(2 * math.pi * freq * elapsed) + 1) * 0.5
-            r = int(BOMB_BASE_COLOUR[0] + pulse * (BOMB_PULSE_COLOUR[0] - BOMB_BASE_COLOUR[0]))
-            g = int(BOMB_BASE_COLOUR[1] + pulse * (BOMB_PULSE_COLOUR[1] - BOMB_BASE_COLOUR[1]))
-            b = int(BOMB_BASE_COLOUR[2] + pulse * (BOMB_PULSE_COLOUR[2] - BOMB_BASE_COLOUR[2]))
-            arcade.draw_circle_filled(bomb.px, bomb.py, TILE_SIZE * 0.35, (r, g, b, 255))
+            glow_alpha = int(pulse * 220)
+            arcade.draw_circle_filled(
+                bomb.px, bomb.py, TILE_SIZE * 0.42,
+                (BOMB_PULSE_COLOUR[0], BOMB_PULSE_COLOUR[1], BOMB_PULSE_COLOUR[2], glow_alpha),
+            )
+            if bomb.is_super:
+                emoji = POWERUP_SYMBOLS[PowerupKind.SUPER_BOMB]
+            elif bomb.is_cluster:
+                emoji = POWERUP_SYMBOLS[PowerupKind.CLUSTER_BOMB]
+            elif bomb.is_rubble:
+                emoji = POWERUP_SYMBOLS[PowerupKind.RUBBLE_BOMB]
+            else:
+                emoji = self._BOMB_EMOJI
+            text_obj = self._bomb_texts[emoji]
+            text_obj.x = bomb.px
+            text_obj.y = bomb.py
+            text_obj.draw()
         for key in list(self._bomb_start_times):
             if key not in active_keys:
                 del self._bomb_start_times[key]
