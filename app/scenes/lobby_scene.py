@@ -14,6 +14,7 @@ from app.ui.hud import HUD_WIDTH
 from core.components import TileKind
 from net.client import GameClient
 from net.protocol import GameStartMsg, LobbyUpdateMsg
+from engine import user_prefs
 from engine.config import (
     GRID_COLS, GRID_ROWS, PLAYER_COLOURS, SPAWN_POINTS,
     TILE_SIZE, WINDOW_H, WINDOW_W,
@@ -248,6 +249,7 @@ class LobbyScene:
             self._saturation = min(dist / (_WHEEL_SIZE / 2), 1.0)
             self._update_colour_from_hsv()
             self._client.send_colour(self._colour_rgb)
+            user_prefs.set('colour_rgb', list(self._colour_rgb))
             return True
 
         # Slider → update brightness
@@ -256,6 +258,7 @@ class LobbyScene:
             self._value = max(0.0, min(1.0, (x - sl) / (sr - sl)))
             self._update_colour_from_hsv()
             self._client.send_colour(self._colour_rgb)
+            user_prefs.set('colour_rgb', list(self._colour_rgb))
             return True
 
         return False
@@ -509,6 +512,7 @@ class LobbyScene:
         if stripped and stripped != self._player_name:
             self._player_name = stripped
             self._client.send_rename(stripped)
+            user_prefs.set('name', stripped)
 
     def on_key_press(self, key: int, modifiers: int) -> None:
         if self._editing_name:
@@ -529,8 +533,10 @@ class LobbyScene:
             self._client.send_ready(self._ready)
         elif key == arcade.key.BRACKETLEFT:
             self._volume = round(max(0.0, self._volume - 0.1), 1)
+            user_prefs.set('volume', self._volume)
         elif key == arcade.key.BRACKETRIGHT:
             self._volume = round(min(1.0, self._volume + 0.1), 1)
+            user_prefs.set('volume', self._volume)
 
     def on_key_release(self, key: int, modifiers: int) -> None:
         pass
