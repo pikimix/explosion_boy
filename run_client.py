@@ -10,13 +10,16 @@ from net.client import GameClient
 from engine.config import DEFAULT_PORT
 from engine.transport import make_client_transport
 from engine.window import GameWindow
+from engine import user_prefs
 
 
 def main() -> None:
+    prefs = user_prefs.load()
+
     parser = argparse.ArgumentParser(description="Explosion Boy client")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
-    parser.add_argument("--name", default="Player")
+    parser.add_argument("--name", default=prefs['name'])
     parser.add_argument("--backend", default="dual",
                         help="Transport backend (default: dual)")
     parser.add_argument("--no-shader", action="store_true",
@@ -34,13 +37,22 @@ def main() -> None:
     )
     client = GameClient(transport)
 
+    colour_rgb = prefs['colour_rgb']
+    colour_tuple = tuple(colour_rgb) if colour_rgb is not None else None
+
     window = GameWindow()
     manager = SceneManager()
-    manager.push(LobbyScene(client, args.name, manager, debug=args.debug))
+    manager.push(LobbyScene(
+        client, args.name, manager,
+        volume=prefs['volume'],
+        colour_rgb=colour_tuple,
+        debug=args.debug,
+    ))
     window.set_scene_manager(manager)
 
     arcade.run()
 
+    user_prefs.save()
     client.stop()
 
 

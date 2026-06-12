@@ -15,6 +15,7 @@ from core.state import GameState
 from net.client import GameClient
 from net.protocol import GameOverMsg, GameStartMsg, InputMsg
 from engine.config import INPUT_LEAD_TICKS, TICK_RATE
+from engine import user_prefs
 from systems.prediction import PredictionEngine
 
 
@@ -113,8 +114,10 @@ class GameScene:
         self._keys.add(key)
         if key == arcade.key.BRACKETLEFT:
             self._sounds.volume = round(self._sounds.volume - 0.1, 1)
+            user_prefs.set('volume', self._sounds.volume)
         elif key == arcade.key.BRACKETRIGHT:
             self._sounds.volume = round(self._sounds.volume + 0.1, 1)
+            user_prefs.set('volume', self._sounds.volume)
         elif key == arcade.key.T and self._debug:
             self._sounds.step_pitch()
 
