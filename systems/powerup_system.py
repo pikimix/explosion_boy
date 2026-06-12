@@ -10,15 +10,16 @@ from systems.collision import px_to_grid
 
 
 _POWERUP_WEIGHTS: dict[PowerupKind, int] = {
-    PowerupKind.EXTRA_BOMB:       10,
-    PowerupKind.BLAST_UP:         10,
-    PowerupKind.SPEED_UP:         10,
-    PowerupKind.SHIELD:            6,
-    PowerupKind.REVERSE_CONTROLS:  3,
-    PowerupKind.SKULL:             1,
-    PowerupKind.SUPER_BOMB:        5,
-    PowerupKind.CLUSTER_BOMB:      5,
-    PowerupKind.RUBBLE_BOMB:       5,
+    PowerupKind.EXTRA_BOMB:            10,
+    PowerupKind.BLAST_UP:              10,
+    PowerupKind.SPEED_UP:              10,
+    PowerupKind.SHIELD:                 6,
+    PowerupKind.REVERSE_CONTROLS:       3,
+    PowerupKind.REVERSE_CONTROLS_SELF:  3,
+    PowerupKind.SKULL:                  1,
+    PowerupKind.SUPER_BOMB:             5,
+    PowerupKind.CLUSTER_BOMB:           5,
+    PowerupKind.RUBBLE_BOMB:            5,
 }
 
 _POWERUP_POPULATION = list(_POWERUP_WEIGHTS.keys())
@@ -93,6 +94,10 @@ def _apply(state: GameState, player_id: int, kind: PowerupKind) -> None:
     elif kind == PowerupKind.SHIELD:
         stats.shield = True
     elif kind == PowerupKind.REVERSE_CONTROLS:
+        for other_id, other_stats in state.players.items():
+            if other_id != player_id:
+                other_stats.reversed_controls_ticks = REVERSE_CONTROLS_TICKS
+    elif kind == PowerupKind.REVERSE_CONTROLS_SELF:
         stats.reversed_controls_ticks = REVERSE_CONTROLS_TICKS
     elif kind == PowerupKind.SPEED_UP:
         stats.speed_level = min(stats.speed_level + 1, SPEED_BOOST_MAX_LEVEL)

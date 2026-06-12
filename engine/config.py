@@ -48,24 +48,26 @@ POWERUP_COLOURS: dict[int, tuple[int, int, int, int]] = {
     1: (255, 215, 0,   255),   # gold        (EXTRA_BOMB)
     2: (255, 69,  0,   255),   # orange-red  (BLAST_UP)
     3: (100, 200, 255, 255),   # sky blue    (SHIELD)
-    4: (200, 50,  220, 255),   # purple      (REVERSE_CONTROLS)
-    5: (50,  220, 80,  255),   # green       (SPEED_UP)
-    6: (60,  60,  60,  255),   # dark grey   (SKULL)
-    7: (255, 50,  50,  255),   # bright red  (SUPER_BOMB)
-    8: (255, 140, 0,   255),   # deep orange (CLUSTER_BOMB)
-    9: (139, 90,  43,  255),   # earthy brown (RUBBLE_BOMB)
+    4:  (200, 50,  220, 255),   # purple      (REVERSE_CONTROLS)
+    5:  (50,  220, 80,  255),   # green       (SPEED_UP)
+    6:  (60,  60,  60,  255),   # dark grey   (SKULL)
+    7:  (255, 50,  50,  255),   # bright red  (SUPER_BOMB)
+    8:  (255, 140, 0,   255),   # deep orange (CLUSTER_BOMB)
+    9:  (139, 90,  43,  255),   # earthy brown (RUBBLE_BOMB)
+    10: (150, 30,  160, 255),   # dark purple (REVERSE_CONTROLS_SELF)
 }
 
 POWERUP_SYMBOLS: dict[int, str] = {
     1: '+',    # EXTRA_BOMB
     2: '↑',  # BLAST_UP       (↑)
     3: '\U0001f6e1',  # SHIELD     (🛡)
-    4: '?',    # REVERSE_CONTROLS
-    5: '⚡',  # SPEED_UP      (⚡)
-    6: '☠',  # SKULL         (☠)
-    7: '☢',   # SUPER_BOMB    (☢)
-    8: '🎇',  # CLUSTER_BOMB  (🎇)
-    9: '\U0001faa8',  # RUBBLE_BOMB   (🪨)
+    4:  '?',    # REVERSE_CONTROLS      (affects others)
+    5:  '⚡',  # SPEED_UP              (⚡)
+    6:  '☠',  # SKULL                 (☠)
+    7:  '☢',   # SUPER_BOMB            (☢)
+    8:  '🎇',  # CLUSTER_BOMB          (🎇)
+    9:  '\U0001faa8',  # RUBBLE_BOMB   (🪨)
+    10: '¿',   # REVERSE_CONTROLS_SELF (affects collector)
 }
 
 PLAYER_COLOURS = [

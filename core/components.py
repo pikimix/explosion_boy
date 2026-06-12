@@ -18,15 +18,16 @@ class GamePhase(IntEnum):
 
 
 class PowerupKind(IntEnum):
-    EXTRA_BOMB       = 1
-    BLAST_UP         = 2
-    SHIELD           = 3
-    REVERSE_CONTROLS = 4
-    SPEED_UP         = 5
-    SKULL            = 6
-    SUPER_BOMB       = 7
-    CLUSTER_BOMB     = 8
-    RUBBLE_BOMB      = 9
+    EXTRA_BOMB            = 1
+    BLAST_UP              = 2
+    SHIELD                = 3
+    REVERSE_CONTROLS      = 4   # affects all other players
+    SPEED_UP              = 5
+    SKULL                 = 6
+    SUPER_BOMB            = 7
+    CLUSTER_BOMB          = 8
+    RUBBLE_BOMB           = 9
+    REVERSE_CONTROLS_SELF = 10  # affects only the collector
 
 
 @dataclass
