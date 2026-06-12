@@ -71,6 +71,7 @@ class GameServer:
 
         self._last_alive_pids: set[int] = set()
         self._last_2_spawn_tick: int = 0
+        self._initial_soft_blocks: int = 0
 
         self._bus.subscribe(PlayerDiedEvent, self._on_player_died)
 
@@ -167,6 +168,9 @@ class GameServer:
 
         state = self._lobby.build_initial_state()
         self._state = state
+        self._initial_soft_blocks = sum(
+            1 for row in state.tiles for tile in row if tile == 2  # TileKind.SOFT_BLOCK
+        )
 
         space = PhysicsSpace()
         space.rebuild_static_walls(state.tiles)
@@ -219,7 +223,13 @@ class GameServer:
     def _maybe_spawn_last_2_powerup(self, tick: int) -> None:
         if self._state is None:
             return
-        if len(self._state.players) != 2:
+        last_2 = len(self._state.players) == 2
+        few_blocks = (
+            self._initial_soft_blocks > 0
+            and sum(1 for row in self._state.tiles for t in row if t == 2)
+               < self._initial_soft_blocks * 0.1
+        )
+        if not (last_2 or few_blocks):
             return
         if tick - self._last_2_spawn_tick >= _LAST_2_SPAWN_INTERVAL:
             spawn_random_powerup(self._state)
@@ -258,5 +268,6 @@ class GameServer:
         self._peer_to_player.clear()
         self._player_names.clear()
         self._last_2_spawn_tick = 0
+        self._initial_soft_blocks = 0
         self._lobby.reset()
         print(f"[{_ts()}] Server reset. Waiting for players…")
