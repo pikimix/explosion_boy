@@ -48,7 +48,12 @@ from systems.event_bus import EventBus, PlayerDiedEvent
 from systems.explosion_system import process_detonations, tick_explosions
 from systems.input_buffer import InputBuffer
 from systems.movement import process_movement
-from systems.powerup_system import process_powerup_pickups, tick_status_effects
+from systems.powerup_system import (
+    process_powerup_pickups,
+    spawn_random_powerup,
+    tick_status_effects,
+    _LAST_2_SPAWN_INTERVAL,
+)
 
 
 class GameServer:
@@ -65,6 +70,7 @@ class GameServer:
         self._player_names: dict[int, str] = {}
 
         self._last_alive_pids: set[int] = set()
+        self._last_2_spawn_tick: int = 0
 
         self._bus.subscribe(PlayerDiedEvent, self._on_player_died)
 
@@ -195,6 +201,7 @@ class GameServer:
             return
         process_powerup_pickups(self._state)
         tick_status_effects(self._state)
+        self._maybe_spawn_last_2_powerup(tick)
         self._check_win_condition()
 
         if self._state is None:
@@ -206,6 +213,17 @@ class GameServer:
             StateUpdateMsg(tick=tick, state_bytes=state_bytes).encode(),
             CHANNEL_UNRELIABLE,
         )
+
+    # ── Last-two powerup surge ────────────────────────────────────────────────
+
+    def _maybe_spawn_last_2_powerup(self, tick: int) -> None:
+        if self._state is None:
+            return
+        if len(self._state.players) != 2:
+            return
+        if tick - self._last_2_spawn_tick >= _LAST_2_SPAWN_INTERVAL:
+            spawn_random_powerup(self._state)
+            self._last_2_spawn_tick = tick
 
     # ── Win condition ─────────────────────────────────────────────────────────
 
@@ -239,5 +257,6 @@ class GameServer:
         self._input_buffer = InputBuffer()
         self._peer_to_player.clear()
         self._player_names.clear()
+        self._last_2_spawn_tick = 0
         self._lobby.reset()
         print(f"[{_ts()}] Server reset. Waiting for players…")

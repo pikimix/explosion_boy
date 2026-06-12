@@ -24,6 +24,25 @@ _POWERUP_POPULATION = list(_POWERUP_WEIGHTS.keys())
 _POWERUP_CUMULATIVE = list(_POWERUP_WEIGHTS.values())
 
 
+_LAST_2_SPAWN_INTERVAL = 80  # 4 seconds at 20 tps
+
+
+def spawn_random_powerup(state: GameState) -> None:
+    """Spawn a powerup on a random empty tile with no existing powerup."""
+    occupied = {(p.col, p.row) for p in state.powerups}
+    candidates = [
+        (col, row)
+        for row, tile_row in enumerate(state.tiles)
+        for col, tile in enumerate(tile_row)
+        if tile == 0 and (col, row) not in occupied  # TileKind.EMPTY = 0
+    ]
+    if not candidates:
+        return
+    col, row = random.choice(candidates)
+    kind = random.choices(_POWERUP_POPULATION, weights=_POWERUP_CUMULATIVE, k=1)[0]
+    state.powerups.append(PowerupComponent(kind=kind, col=col, row=row))
+
+
 def maybe_drop_powerup(state: GameState, col: int, row: int) -> None:
     if random.random() >= SOFT_BLOCK_DROP_CHANCE:
         return
