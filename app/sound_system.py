@@ -28,7 +28,7 @@ _PICKUP_PATHS: dict[PowerupKind, str] = {
     PowerupKind.BLAST_UP:   ':resources:sounds/upgrade2.wav',
 }
 
-_SCREAM_PATH = Path(__file__).parent.parent / 'resources' / 'sounds' / 'scream.ogg'
+_SCREAM_PATH = Path(__file__).parent.parent / 'resources' / 'sounds' / 'scream.wav'
 
 
 class SoundSystem:
