@@ -50,12 +50,14 @@ def _enc_powerup(p: PowerupComponent) -> list:
 
 def encode_state(gs: GameState) -> bytes:
     if gs.tiles_dirty or gs.tile_list_cache is None:
+        gs.tiles_version += 1
         gs.tile_list_cache = [[int(c) for c in row] for row in gs.tiles]
         gs.tiles_dirty = False
     d: dict[str, Any] = {
         "t": gs.tick,
         "mc": gs.map_cols,
         "mr": gs.map_rows,
+        "tv": gs.tiles_version,
         "tl": gs.tile_list_cache,
         "pl": {str(k): _enc_stats(v) for k, v in gs.players.items()},
         "pp": {str(k): _enc_physics(v) for k, v in gs.player_physics.items()},
@@ -79,6 +81,7 @@ def decode_state(data: bytes) -> GameState:
         tick=d["t"],
         map_cols=d["mc"],
         map_rows=d["mr"],
+        tiles_version=d.get("tv", 0),
         tiles=[[TileKind(c) for c in row] for row in d["tl"]],
         players={int(k): PlayerStats(*v) for k, v in d["pl"].items()},
         player_physics={int(k): PhysicsState(*v) for k, v in d["pp"].items()},
