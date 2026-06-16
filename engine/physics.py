@@ -28,7 +28,7 @@ class PhysicsSpace:
         self._space.damping = PLAYER_DAMPING
         self._player_bodies: dict[int, tuple[pymunk.Body, pymunk.Shape]] = {}
         self._bomb_bodies: dict[int, tuple[pymunk.Body, pymunk.Shape]] = {}
-        self._static_shapes: list[pymunk.Shape] = []
+        self._static_shapes: dict[tuple[int, int], pymunk.Shape] = {}
         self._tiles: list[list[int]] = []
 
         # Collision handler: player (type 1) pushes bomb (type 2)
@@ -38,27 +38,41 @@ class PhysicsSpace:
     # ── Tile walls ────────────────────────────────────────────────────────────
 
     def rebuild_static_walls(self, tiles: list[list]) -> None:
-        for shape in self._static_shapes:
+        for shape in self._static_shapes.values():
             self._space.remove(shape)
         self._static_shapes.clear()
         self._tiles = tiles
 
-        body = self._space.static_body
         rows = len(tiles)
         cols = len(tiles[0]) if rows else 0
         for row in range(rows):
             for col in range(cols):
-                if tiles[row][col] == _PASSABLE_TILE:
-                    continue
-                x = col * TILE_SIZE
-                y = row * TILE_SIZE
-                verts = [(x, y), (x + TILE_SIZE, y),
-                         (x + TILE_SIZE, y + TILE_SIZE), (x, y + TILE_SIZE)]
-                shape = pymunk.Poly(body, verts)
-                shape.elasticity = 0.0
-                shape.friction = 0.0
-                self._space.add(shape)
-                self._static_shapes.append(shape)
+                if tiles[row][col] != _PASSABLE_TILE:
+                    self._static_shapes[(col, row)] = self._make_wall_shape(col, row)
+
+    def _make_wall_shape(self, col: int, row: int) -> pymunk.Shape:
+        x = col * TILE_SIZE
+        y = row * TILE_SIZE
+        verts = [(x, y), (x + TILE_SIZE, y),
+                 (x + TILE_SIZE, y + TILE_SIZE), (x, y + TILE_SIZE)]
+        shape = pymunk.Poly(self._space.static_body, verts)
+        shape.elasticity = 0.0
+        shape.friction = 0.0
+        self._space.add(shape)
+        return shape
+
+    def remove_wall(self, col: int, row: int) -> None:
+        shape = self._static_shapes.pop((col, row), None)
+        if shape is not None:
+            self._space.remove(shape)
+        if self._tiles:
+            self._tiles[row][col] = _PASSABLE_TILE
+
+    def add_wall(self, col: int, row: int) -> None:
+        if (col, row) not in self._static_shapes:
+            self._static_shapes[(col, row)] = self._make_wall_shape(col, row)
+        if self._tiles:
+            self._tiles[row][col] = 2  # TileKind.SOFT_BLOCK — non-zero for _correct_player_positions
 
     # ── Players ───────────────────────────────────────────────────────────────
 
