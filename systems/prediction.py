@@ -29,7 +29,8 @@ class PredictionEngine:
         self._predicted_x: float = 0.0
         self._predicted_y: float = 0.0
         self._confirmed_state: GameState | None = None
-        self._tile_soft_block_count: int = -1  # soft block count from last reconcile
+        self._tiles_version: int = -1
+        self._confirmed_tiles: list[list] | None = None
 
     # ── Called by game_scene when a new input is generated ────────────────────
 
@@ -81,21 +82,25 @@ class PredictionEngine:
     # ── Internal helpers ──────────────────────────────────────────────────────
 
     def _rebuild_space(self, state: GameState) -> None:
-        # Tiles only change when soft blocks are destroyed. Rebuilding 500+ pymunk
-        # wall shapes every frame is the main source of cross-client input latency.
-        soft_count = sum(
-            1 for row in state.tiles for cell in row
-            if int(cell) == 2  # TileKind.SOFT_BLOCK
-        )
-        if soft_count != self._tile_soft_block_count:
-            self._space = PhysicsSpace()
-            self._space.rebuild_static_walls(state.tiles)
-            self._tile_soft_block_count = soft_count
-        else:
-            # Reuse existing static geometry — remove only the dynamic bodies.
-            self._space.remove_player(self._pid)
-            for i in list(self._space.bomb_indices()):
-                self._space.remove_bomb(i)
+        # Remove dynamic bodies — always re-added below.
+        self._space.remove_player(self._pid)
+        for i in list(self._space.bomb_indices()):
+            self._space.remove_bomb(i)
+
+        if state.tiles_version != self._tiles_version:
+            if self._confirmed_tiles is not None:
+                # Incremental update: only touch cells that changed.
+                for r, row in enumerate(state.tiles):
+                    for c, kind in enumerate(row):
+                        if kind != self._confirmed_tiles[r][c]:
+                            if int(kind) == 0:  # TileKind.EMPTY — wall removed
+                                self._space.remove_wall(c, r)
+                            else:  # TileKind.SOFT_BLOCK added by rubble bomb
+                                self._space.add_wall(c, r)
+            else:
+                self._space.rebuild_static_walls(state.tiles)
+            self._confirmed_tiles = state.tiles
+            self._tiles_version = state.tiles_version
 
         # Bomb shapes (for push interaction)
         for i, bomb in enumerate(state.bombs):

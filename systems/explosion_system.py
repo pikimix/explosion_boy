@@ -74,8 +74,7 @@ def process_detonations(
                         state.tiles_dirty = True
                         bus.emit(SoftBlockDestroyedEvent(c, r))
                         maybe_drop_powerup(state, c, r)
-                        # Rebuild static walls to remove this block from physics
-                        space.rebuild_static_walls(state.tiles)
+                        space.remove_wall(c, r)
                         ray_len = dist
                         break
 
@@ -121,7 +120,6 @@ def _super_bomb_explosion(
     processed_indices: set[int],
 ) -> None:
     """AOE explosion scaled to half the owner's blast radius (min 5×5), passes through solid walls."""
-    needs_rebuild = False
     half = max(2, det.blast_radius // 2)
     for dr in range(-half, half + 1):
         for dc in range(-half, half + 1):
@@ -134,7 +132,7 @@ def _super_bomb_explosion(
                 state.tiles_dirty = True
                 bus.emit(SoftBlockDestroyedEvent(c, r))
                 maybe_drop_powerup(state, c, r)
-                needs_rebuild = True
+                space.remove_wall(c, r)
             bi = bomb_by_cell.get((c, r))
             if bi is not None and bi not in processed_indices and bi != det.bomb_idx:
                 b = state.bombs[bi]
@@ -143,8 +141,6 @@ def _super_bomb_explosion(
                     blast_radius=b.blast_radius, owner_id=b.owner_id,
                     is_super=b.is_super, is_cluster=b.is_cluster, is_rubble=b.is_rubble,
                 ))
-    if needs_rebuild:
-        space.rebuild_static_walls(state.tiles)
 
 
 def _rubble_bomb_explosion(
@@ -157,7 +153,6 @@ def _rubble_bomb_explosion(
     processed_indices: set[int],
 ) -> None:
     """AOE explosion like super bomb, then scatters soft blocks on empty cells (1-in-5 chance)."""
-    needs_rebuild = False
     half = max(2, det.blast_radius // 2)
     affected: list[tuple[int, int]] = []
 
@@ -173,7 +168,7 @@ def _rubble_bomb_explosion(
                 state.tiles_dirty = True
                 bus.emit(SoftBlockDestroyedEvent(c, r))
                 maybe_drop_powerup(state, c, r)
-                needs_rebuild = True
+                space.remove_wall(c, r)
             bi = bomb_by_cell.get((c, r))
             if bi is not None and bi not in processed_indices and bi != det.bomb_idx:
                 b = state.bombs[bi]
@@ -194,10 +189,7 @@ def _rubble_bomb_explosion(
             if random.random() < 0.2:
                 state.tiles[r][c] = TileKind.SOFT_BLOCK
                 state.tiles_dirty = True
-                needs_rebuild = True
-
-    if needs_rebuild:
-        space.rebuild_static_walls(state.tiles)
+                space.add_wall(c, r)
 
 
 def _spawn_cluster_sub_bombs(
