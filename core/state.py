@@ -39,6 +39,10 @@ class GameState:
     phase: GamePhase = GamePhase.LOBBY
     winner_id: int | None = None
 
+    # Incremented server-side whenever tiles change; serialised so the client
+    # can skip the expensive ShapeElementList rebuild when nothing changed.
+    tiles_version: int = field(default=0, repr=False, compare=False)
+
     # Server-side caches — not serialised, not compared
     tiles_dirty: bool = field(default=True, repr=False, compare=False)
     tile_list_cache: list[list[int]] | None = field(

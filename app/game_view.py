@@ -42,7 +42,7 @@ _TILE_COLOURS = {
 class GameView:
     def __init__(self) -> None:
         self._tile_list: arcade.shape_list.ShapeElementList | None = None
-        self._last_tiles: list[list[TileKind]] | None = None
+        self._last_tiles_version: int = -1
         self._bomb_start_times: dict[tuple[int, int], float] = {}
         self._map_w = GRID_COLS * TILE_SIZE
         self._map_h = GRID_ROWS * TILE_SIZE
@@ -119,13 +119,13 @@ class GameView:
     # ── Tiles ─────────────────────────────────────────────────────────────────
 
     def _draw_tiles(self, state: GameState) -> None:
-        if state.tiles is not self._last_tiles:
+        if state.tiles_version != self._last_tiles_version:
             self._rebuild_tile_shapes(state)
         if self._tile_list:
             self._tile_list.draw()
 
     def _rebuild_tile_shapes(self, state: GameState) -> None:
-        self._last_tiles = state.tiles
+        self._last_tiles_version = state.tiles_version
         shape_list = arcade.shape_list.ShapeElementList()
         for row in range(state.map_rows):
             for col in range(state.map_cols):
