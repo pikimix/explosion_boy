@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import colorsys
 import math
+from pathlib import Path
 
 import arcade
 import arcade.camera
 import arcade.shape_list
 from PIL import Image
 
+from app.sound_system import MusicPlayer, set_master_volume
 from app.ui import volume_widget
 from app.ui.hud import HUD_WIDTH
 from core.components import TileKind
@@ -19,6 +21,8 @@ from engine.config import (
     GRID_COLS, GRID_ROWS, PLAYER_COLOURS, SPAWN_POINTS,
     TILE_SIZE, WINDOW_H, WINDOW_W,
 )
+
+_LOBBY_MUSIC_PATH = Path(__file__).parent.parent.parent / 'resources' / 'music' / 'in_the_lobby.wav'
 
 _SOLID_COLOUR = (60,  60,  60,  255)
 _EMPTY_COLOUR = (180, 180, 180, 255)
@@ -150,6 +154,10 @@ class LobbyScene:
             color=(255, 255, 255), font_size=11,
             anchor_x='left', anchor_y='center',
         )
+
+        set_master_volume(self._volume)
+        self._music = MusicPlayer(_LOBBY_MUSIC_PATH)
+        self._music.play()
 
         client.send_join(player_name)
 
@@ -316,6 +324,7 @@ class LobbyScene:
                     self._colour_sent = True
                 self._rebuild_spawn_markers()
             elif isinstance(msg, GameStartMsg):
+                self._music.stop()
                 from app.scenes.game_scene import GameScene
                 self._scene_manager.replace(
                     GameScene(self._client, self._scene_manager, self._player_name,
@@ -534,9 +543,13 @@ class LobbyScene:
         elif key == arcade.key.BRACKETLEFT:
             self._volume = round(max(0.0, self._volume - 0.1), 1)
             user_prefs.set('volume', self._volume)
+            set_master_volume(self._volume)
+            self._music.sync_volume()
         elif key == arcade.key.BRACKETRIGHT:
             self._volume = round(min(1.0, self._volume + 0.1), 1)
             user_prefs.set('volume', self._volume)
+            set_master_volume(self._volume)
+            self._music.sync_volume()
 
     def on_key_release(self, key: int, modifiers: int) -> None:
         pass
