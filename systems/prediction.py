@@ -20,6 +20,10 @@ from core.tick import TICK_DT
 from engine.config import MAX_PLAYER_SPEED, TILE_SIZE
 from engine.physics import PhysicsSpace
 
+# If the server position diverges from our prediction by more than this many
+# pixels, hard-snap rather than silently drifting (wall clip, real desync).
+_SNAP_THRESHOLD = TILE_SIZE * 0.6
+
 
 class PredictionEngine:
     def __init__(self, local_player_id: int) -> None:
@@ -42,22 +46,42 @@ class PredictionEngine:
     # ── Called when a StateUpdateMsg arrives from the server ──────────────────
 
     def reconcile(self, server_state: GameState) -> None:
-        """Accept authoritative state and replay unconfirmed inputs."""
+        """Accept authoritative state and replay unconfirmed inputs.
+
+        If the server position is within _SNAP_THRESHOLD of our current
+        prediction we keep the predicted position (client-authoritative feel).
+        Only hard-snap on large discrepancies — wall clips, genuine desync.
+        """
         self._confirmed_state = server_state
-        self._rebuild_space(server_state)
 
-        # Discard inputs that have been confirmed by the server
-        while (self._pending
-               and self._pending[0].tick <= server_state.tick):
-            self._pending.popleft()
+        # Check server position against current prediction before rebuilding.
+        phys = server_state.player_physics.get(self._pid)
+        if phys:
+            dx = phys.x - self._predicted_x
+            dy = phys.y - self._predicted_y
+            within_threshold = (dx * dx + dy * dy) ** 0.5 < _SNAP_THRESHOLD
+        else:
+            within_threshold = False
 
-        # Replay remaining unconfirmed inputs
-        for inp in self._pending:
-            self._step_input(inp)
-
-        pos = self._space.get_player_position(self._pid)
-        if pos:
-            self._predicted_x, self._predicted_y = pos
+        if within_threshold:
+            # Small discrepancy — update game state (bombs, other players,
+            # powerups) but keep our predicted position and skip the replay.
+            self._confirmed_state = server_state
+            self._rebuild_space(server_state, keep_position=True)
+            while (self._pending
+                   and self._pending[0].tick <= server_state.tick):
+                self._pending.popleft()
+        else:
+            # Large discrepancy or no local position yet — hard-snap and replay.
+            self._rebuild_space(server_state, keep_position=False)
+            while (self._pending
+                   and self._pending[0].tick <= server_state.tick):
+                self._pending.popleft()
+            for inp in self._pending:
+                self._step_input(inp)
+            pos = self._space.get_player_position(self._pid)
+            if pos:
+                self._predicted_x, self._predicted_y = pos
 
     # ── Predicted position for rendering ──────────────────────────────────────
 
@@ -81,7 +105,7 @@ class PredictionEngine:
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
-    def _rebuild_space(self, state: GameState) -> None:
+    def _rebuild_space(self, state: GameState, *, keep_position: bool = False) -> None:
         # Remove dynamic bodies — always re-added below.
         self._space.remove_player(self._pid)
         for i in list(self._space.bomb_indices()):
@@ -105,11 +129,16 @@ class PredictionEngine:
         # Bomb shapes (for push interaction)
         for i, bomb in enumerate(state.bombs):
             self._space.add_bomb(i, bomb.px, bomb.py)
-        # Local player body at server-confirmed position
+
         phys = state.player_physics.get(self._pid)
         if phys:
-            self._space.add_player(self._pid, phys.x, phys.y)
-            self._predicted_x, self._predicted_y = phys.x, phys.y
+            if keep_position:
+                # Plant body at our predicted position so wall collision in the
+                # physics space stays consistent, but don't update the rendered pos.
+                self._space.add_player(self._pid, self._predicted_x, self._predicted_y)
+            else:
+                self._space.add_player(self._pid, phys.x, phys.y)
+                self._predicted_x, self._predicted_y = phys.x, phys.y
 
     def _step_input(self, inp: PlayerInput) -> None:
         if not self._space.has_player(self._pid):
