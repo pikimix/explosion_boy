@@ -325,9 +325,14 @@ class DualClientTransport:
         events: list[TransportEvent] = []
 
         if self._connecting:
-            _, writable, exceptional = select.select(
-                [], [self._tcp_sock], [self._tcp_sock], timeout
-            )
+            try:
+                _, writable, exceptional = select.select(
+                    [], [self._tcp_sock], [self._tcp_sock], timeout
+                )
+            except OSError:
+                self._connecting = False
+                events.append(DisconnectEvent(self._local_id))
+                return events
             if exceptional:
                 self._connecting = False
                 events.append(DisconnectEvent(self._local_id))
