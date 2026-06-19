@@ -165,9 +165,9 @@ class GameClient:
         if isinstance(msg, WelcomeMsg):
             self._player_id = msg.assigned_player_id
         elif isinstance(msg, (GameStartMsg, LobbyUpdateMsg, GameOverMsg)):
-            self._message_queue.append(msg)
             if isinstance(msg, GameStartMsg):
                 state = msg.get_state()
                 with self._lock:
                     self._last_state = state
                     self._last_state_tick = state.tick
+            self._message_queue.append(msg)
