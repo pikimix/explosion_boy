@@ -329,7 +329,7 @@ class LobbyScene:
                 self._scene_manager.replace(
                     GameScene(self._client, self._scene_manager, self._player_name,
                               volume=self._volume, colour_rgb=self._colour_rgb,
-                              debug=self._debug)
+                              debug=self._debug, start_state=msg.get_state())
                 )
                 return
 

@@ -25,7 +25,8 @@ class GameScene:
                  player_name: str = "Player",
                  volume: float = 1.0,
                  colour_rgb: tuple[int, int, int] = (220, 50, 50),
-                 debug: bool = False) -> None:
+                 debug: bool = False,
+                 start_state: GameState | None = None) -> None:
         self._client = client
         self._scene_manager = scene_manager
         self._player_name = player_name
@@ -40,7 +41,10 @@ class GameScene:
         self._keys: set[int] = set()
 
         pid = client.player_id
-        state = client.get_state()
+        # Use the state from the GameStartMsg directly so self._tick is based on
+        # the server tick at the moment of game start, not a later state update
+        # that the net thread may have written to _last_state by now.
+        state = start_state if start_state is not None else client.get_state()
         self._tick = (state.tick if state else 0) + INPUT_LEAD_TICKS
         if pid is not None:
             self._prediction = PredictionEngine(pid)
