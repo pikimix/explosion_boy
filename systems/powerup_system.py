@@ -13,13 +13,13 @@ _POWERUP_WEIGHTS: dict[PowerupKind, int] = {
     PowerupKind.EXTRA_BOMB:            10,
     PowerupKind.BLAST_UP:              10,
     PowerupKind.SPEED_UP:              10,
-    PowerupKind.SHIELD:                 6,
+    PowerupKind.SHIELD:                 4,
     PowerupKind.REVERSE_CONTROLS:       3,
-    PowerupKind.REVERSE_CONTROLS_SELF:  3,
+    PowerupKind.REVERSE_CONTROLS_SELF:  1,
     PowerupKind.SKULL:                  1,
-    PowerupKind.SUPER_BOMB:             5,
-    PowerupKind.CLUSTER_BOMB:           5,
-    PowerupKind.RUBBLE_BOMB:            5,
+    PowerupKind.SUPER_BOMB:             9,
+    PowerupKind.CLUSTER_BOMB:           9,
+    PowerupKind.RUBBLE_BOMB:            9,
 }
 
 _POWERUP_POPULATION = list(_POWERUP_WEIGHTS.keys())
