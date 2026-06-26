@@ -48,40 +48,46 @@ class PredictionEngine:
     def reconcile(self, server_state: GameState) -> None:
         """Accept authoritative state and replay unconfirmed inputs.
 
-        If the server position is within _SNAP_THRESHOLD of our current
-        prediction we keep the predicted position (client-authoritative feel).
-        Only hard-snap on large discrepancies — wall clips, genuine desync.
+        Always rebuilds from the server snapshot and replays pending inputs,
+        then compares the *replayed* position against the *prior predicted*
+        position.  If they agree within _SNAP_THRESHOLD the prediction was
+        accurate and we keep the predicted position (no visible correction).
+        Only snap when they genuinely diverge — wall clips, real desync.
+
+        Comparing replayed vs predicted (rather than server vs predicted) is
+        important because the server is always INPUT_LEAD_TICKS behind by
+        design, so server vs predicted is always large while moving and would
+        incorrectly trigger a hard-snap on every reconcile.
         """
         self._confirmed_state = server_state
 
-        # Check server position against current prediction before rebuilding.
-        phys = server_state.player_physics.get(self._pid)
-        if phys:
-            dx = phys.x - self._predicted_x
-            dy = phys.y - self._predicted_y
-            within_threshold = (dx * dx + dy * dy) ** 0.5 < _SNAP_THRESHOLD
-        else:
-            within_threshold = False
+        # Remember where we were before reconciliation.
+        prev_x, prev_y = self._predicted_x, self._predicted_y
 
-        if within_threshold:
-            # Small discrepancy — update game state (bombs, other players,
-            # powerups) but keep our predicted position and skip the replay.
-            self._confirmed_state = server_state
-            self._rebuild_space(server_state, keep_position=True)
-            while (self._pending
-                   and self._pending[0].tick <= server_state.tick):
-                self._pending.popleft()
-        else:
-            # Large discrepancy or no local position yet — hard-snap and replay.
-            self._rebuild_space(server_state, keep_position=False)
-            while (self._pending
-                   and self._pending[0].tick <= server_state.tick):
-                self._pending.popleft()
-            for inp in self._pending:
-                self._step_input(inp)
-            pos = self._space.get_player_position(self._pid)
-            if pos:
-                self._predicted_x, self._predicted_y = pos
+        # Rebuild from authoritative server state and replay all unconfirmed
+        # inputs.  This gives the server-authoritative predicted position.
+        self._rebuild_space(server_state)
+        while (self._pending
+               and self._pending[0].tick <= server_state.tick):
+            self._pending.popleft()
+        for inp in self._pending:
+            self._step_input(inp)
+
+        pos = self._space.get_player_position(self._pid)
+        if pos:
+            replayed_x, replayed_y = pos
+            dx = replayed_x - prev_x
+            dy = replayed_y - prev_y
+            if (dx * dx + dy * dy) ** 0.5 < _SNAP_THRESHOLD:
+                # Replay matches prior prediction — keep the predicted position
+                # for smooth rendering and re-plant the physics body there so
+                # future collision detection is consistent.
+                self._space.remove_player(self._pid)
+                self._space.add_player(self._pid, prev_x, prev_y)
+                self._predicted_x, self._predicted_y = prev_x, prev_y
+            else:
+                # Genuine desync — snap to the authoritative replayed position.
+                self._predicted_x, self._predicted_y = replayed_x, replayed_y
 
     # ── Predicted position for rendering ──────────────────────────────────────
 
@@ -105,7 +111,7 @@ class PredictionEngine:
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
-    def _rebuild_space(self, state: GameState, *, keep_position: bool = False) -> None:
+    def _rebuild_space(self, state: GameState) -> None:
         # Remove dynamic bodies — always re-added below.
         self._space.remove_player(self._pid)
         for i in list(self._space.bomb_indices()):
@@ -132,13 +138,8 @@ class PredictionEngine:
 
         phys = state.player_physics.get(self._pid)
         if phys:
-            if keep_position:
-                # Plant body at our predicted position so wall collision in the
-                # physics space stays consistent, but don't update the rendered pos.
-                self._space.add_player(self._pid, self._predicted_x, self._predicted_y)
-            else:
-                self._space.add_player(self._pid, phys.x, phys.y)
-                self._predicted_x, self._predicted_y = phys.x, phys.y
+            self._space.add_player(self._pid, phys.x, phys.y)
+            self._predicted_x, self._predicted_y = phys.x, phys.y
 
     def _step_input(self, inp: PlayerInput) -> None:
         if not self._space.has_player(self._pid):
