@@ -8,7 +8,8 @@ _PREFS_FILE = Path.home() / '.config' / 'explosion_boy' / 'prefs.json'
 
 _DEFAULTS: dict = {
     'name': 'Player',
-    'volume': 1.0,
+    'music_volume': 1.0,
+    'sfx_volume': 1.0,
     'colour_rgb': None,
 }
 
@@ -25,6 +26,10 @@ def load() -> dict:
             for key in _DEFAULTS:
                 if key in data:
                     _prefs[key] = data[key]
+            # Migrate old single volume key to separate music/sfx volumes
+            if 'volume' in data and 'music_volume' not in data:
+                _prefs['music_volume'] = data['volume']
+                _prefs['sfx_volume'] = data['volume']
         except Exception:
             pass
     return dict(_prefs)

@@ -25,8 +25,6 @@ _BOMB_X = _X
 _BLAST_X = _X + 54.0
 _SPEED_X = _X + 108.0
 
-_VOLUME_WIDGET_H = 10 + 10 + 28 + 4 + 6 * 2
-
 _LEGEND_SYMBOL_SIZE = 14
 _LEGEND_LABEL_SIZE = 10
 _LEGEND_H = 16.0
@@ -131,7 +129,7 @@ def draw(state: GameState) -> None:
 
 def _draw_legend(win: arcade.Window) -> None:
     global _legend_header
-    bottom_margin = _VOLUME_WIDGET_H + 8.0
+    bottom_margin = 8.0
     total_h = _LEGEND_H + len(_LEGEND_ENTRIES) * _LEGEND_H
     y = bottom_margin + total_h - _LEGEND_H
 

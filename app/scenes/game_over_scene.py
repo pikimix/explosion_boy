@@ -12,14 +12,16 @@ class GameOverScene:
                  scene_manager: "SceneManager",  # type: ignore[name-defined]
                  client: "GameClient",            # type: ignore[name-defined]
                  player_name: str = "Player",
-                 volume: float = 1.0,
+                 music_volume: float = 1.0,
+                 sfx_volume: float = 1.0,
                  colour_rgb: tuple[int, int, int] = (220, 50, 50),
                  debug: bool = False) -> None:
         self._scene_manager = scene_manager
         self._client = client
         self._result = result
         self._player_name = player_name
-        self._volume = volume
+        self._music_volume = music_volume
+        self._sfx_volume = sfx_volume
         self._colour_rgb = colour_rgb
         self._debug = debug
 
@@ -69,8 +71,8 @@ class GameOverScene:
         self._ui.disable()
         self._scene_manager.replace(
             LobbyScene(self._client, self._player_name, self._scene_manager,
-                       volume=self._volume, colour_rgb=self._colour_rgb,
-                       debug=self._debug)
+                       music_volume=self._music_volume, sfx_volume=self._sfx_volume,
+                       colour_rgb=self._colour_rgb, debug=self._debug)
         )
 
     def _on_quit(self, _event) -> None:

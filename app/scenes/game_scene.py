@@ -23,7 +23,8 @@ class GameScene:
     def __init__(self, client: GameClient,
                  scene_manager: "SceneManager",  # type: ignore[name-defined]
                  player_name: str = "Player",
-                 volume: float = 1.0,
+                 music_volume: float = 1.0,
+                 sfx_volume: float = 1.0,
                  colour_rgb: tuple[int, int, int] = (220, 50, 50),
                  debug: bool = False,
                  start_state: GameState | None = None) -> None:
@@ -33,7 +34,7 @@ class GameScene:
         self._colour_rgb = colour_rgb
         self._debug = debug
         self._view = GameView()
-        self._sounds = SoundSystem(client.player_id, volume=volume)
+        self._sounds = SoundSystem(client.player_id, music_volume=music_volume, sfx_volume=sfx_volume)
         self._prev_state: GameState | None = None
         self._last_sound_tick: int = -1
         self._prediction: PredictionEngine | None = None
@@ -41,11 +42,14 @@ class GameScene:
         self._keys: set[int] = set()
 
         pid = client.player_id
-        # Use the state from the GameStartMsg directly so self._tick is based on
-        # the server tick at the moment of game start, not a later state update
-        # that the net thread may have written to _last_state by now.
         state = start_state if start_state is not None else client.get_state()
-        self._tick = (state.tick if state else 0) + INPUT_LEAD_TICKS
+        # Base _tick on the most recently received server tick, not the game-start
+        # tick (which may be 0 or stale by the time the first update() fires).
+        # Using the latest state prevents inputs being sent for ticks the server
+        # has already processed.
+        current = client.get_state()
+        base_tick = current.tick if current else (state.tick if state else 0)
+        self._tick = base_tick + INPUT_LEAD_TICKS
         if pid is not None:
             self._prediction = PredictionEngine(pid)
             if state:
@@ -59,7 +63,9 @@ class GameScene:
                 self._sounds.stop()
                 self._scene_manager.replace(
                     GameOverScene(msg, self._scene_manager, self._client, self._player_name,
-                                  volume=self._sounds.volume, colour_rgb=self._colour_rgb,
+                                  music_volume=self._sounds.music_volume,
+                                  sfx_volume=self._sounds.sfx_volume,
+                                  colour_rgb=self._colour_rgb,
                                   debug=self._debug)
                 )
                 return
@@ -85,6 +91,16 @@ class GameScene:
         # Cap dt to one tick so a slow first frame (e.g. asset loading) never
         # fires a catch-up burst that inflates the client lead permanently.
         tick_dt = 1.0 / TICK_RATE
+
+        # Guard: if the client tick has fallen behind the server (lead < 1),
+        # hard-resync so subsequent inputs land in the server's future.
+        # This recovers from startup races and any accumulated clock drift.
+        if state and (self._tick - state.tick) < 1:
+            old_tick = self._tick
+            self._tick = state.tick + INPUT_LEAD_TICKS
+            if self._debug:
+                print(f"[{_ts()}] [client pid={self._client.player_id}] tick resync: {old_tick} → {self._tick} (server={state.tick})")
+
         self._tick_accum += min(dt, tick_dt)
         while self._tick_accum >= tick_dt:
             self._tick_accum -= tick_dt
@@ -107,7 +123,6 @@ class GameScene:
             predicted_y=pred.predicted_y if pred else None,
             predicted_vx=pred.predicted_vx if pred else None,
             predicted_vy=pred.predicted_vy if pred else None,
-            volume=self._sounds.volume,
             speed=self._sounds.pitch if self._debug else None,
         )
         if self._client.reconnecting:
@@ -115,14 +130,12 @@ class GameScene:
             draw_reconnecting()
 
     def on_key_press(self, key: int, modifiers: int) -> None:
+        if key == arcade.key.ESCAPE:
+            from app.scenes.pause_menu_scene import PauseMenuScene
+            self._scene_manager.push(PauseMenuScene(self, self._scene_manager, self._sounds))
+            return
         self._keys.add(key)
-        if key == arcade.key.BRACKETLEFT:
-            self._sounds.volume = round(self._sounds.volume - 0.1, 1)
-            user_prefs.set('volume', self._sounds.volume)
-        elif key == arcade.key.BRACKETRIGHT:
-            self._sounds.volume = round(self._sounds.volume + 0.1, 1)
-            user_prefs.set('volume', self._sounds.volume)
-        elif key == arcade.key.T and self._debug:
+        if key == arcade.key.T and self._debug:
             self._sounds.step_pitch()
 
     def on_key_release(self, key: int, modifiers: int) -> None:

@@ -58,6 +58,18 @@ class SceneManager:
             if hasattr(scene, 'on_mouse_drag'):
                 scene.on_mouse_drag(x, y, dx, dy, buttons, modifiers)
 
+    def on_mouse_release(self, x: float, y: float, button: int, modifiers: int) -> None:
+        if self._stack:
+            scene = self._stack[-1]
+            if hasattr(scene, 'on_mouse_release'):
+                scene.on_mouse_release(x, y, button, modifiers)
+
+    def on_mouse_motion(self, x: float, y: float, dx: float, dy: float) -> None:
+        if self._stack:
+            scene = self._stack[-1]
+            if hasattr(scene, 'on_mouse_motion'):
+                scene.on_mouse_motion(x, y, dx, dy)
+
     def on_text(self, text: str) -> None:
         if self._stack:
             scene = self._stack[-1]

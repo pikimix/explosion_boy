@@ -31,16 +31,26 @@ _PICKUP_PATHS: dict[PowerupKind, str] = {
 
 _SCREAM_PATH = Path(__file__).parent.parent / 'resources' / 'sounds' / 'scream.wav'
 
-_master_volume: float = 1.0
+_music_volume: float = 1.0
+_sfx_volume: float = 1.0
 
 
-def set_master_volume(value: float) -> None:
-    global _master_volume
-    _master_volume = max(0.0, min(1.0, value))
+def set_music_volume(value: float) -> None:
+    global _music_volume
+    _music_volume = max(0.0, min(1.0, value))
 
 
-def get_master_volume() -> float:
-    return _master_volume
+def get_music_volume() -> float:
+    return _music_volume
+
+
+def set_sfx_volume(value: float) -> None:
+    global _sfx_volume
+    _sfx_volume = max(0.0, min(1.0, value))
+
+
+def get_sfx_volume() -> float:
+    return _sfx_volume
 
 
 class MusicPlayer:
@@ -52,12 +62,12 @@ class MusicPlayer:
 
     def play(self) -> None:
         self._player = arcade.play_sound(
-            self._sound, volume=_master_volume * _MUSIC_GAIN, loop=True,
+            self._sound, volume=_music_volume * _MUSIC_GAIN, loop=True,
         )
 
     def sync_volume(self) -> None:
         if self._player:
-            self._player.volume = _master_volume * _MUSIC_GAIN
+            self._player.volume = _music_volume * _MUSIC_GAIN
 
     def stop(self) -> None:
         if self._player:
@@ -75,24 +85,35 @@ class MusicPlayer:
 
 
 class SoundSystem:
-    def __init__(self, local_player_id: int | None, volume: float = 1.0) -> None:
+    def __init__(self, local_player_id: int | None,
+                 music_volume: float = 1.0, sfx_volume: float = 1.0,
+                 music_path: str | Path = _MUSIC_PATH) -> None:
         self._player_id = local_player_id
-        set_master_volume(volume)
+        set_music_volume(music_volume)
+        set_sfx_volume(sfx_volume)
         self._explosions = [arcade.load_sound(p) for p in _EXPLOSION_PATHS]
         self._pickups = {k: arcade.load_sound(p) for k, p in _PICKUP_PATHS.items()}
         self._scream = arcade.load_sound(str(_SCREAM_PATH))
-        self._music = MusicPlayer(_MUSIC_PATH)
+        self._music = MusicPlayer(music_path)
         self._music.play()
         self._debug_pitch: float = 1.0
 
     @property
-    def volume(self) -> float:
-        return get_master_volume()
+    def music_volume(self) -> float:
+        return get_music_volume()
 
-    @volume.setter
-    def volume(self, value: float) -> None:
-        set_master_volume(value)
+    @music_volume.setter
+    def music_volume(self, value: float) -> None:
+        set_music_volume(value)
         self._music.sync_volume()
+
+    @property
+    def sfx_volume(self) -> float:
+        return get_sfx_volume()
+
+    @sfx_volume.setter
+    def sfx_volume(self, value: float) -> None:
+        set_sfx_volume(value)
 
     @property
     def pitch(self) -> float:
@@ -123,14 +144,14 @@ class SoundSystem:
             return
         deaths = prev.player_physics.keys() - curr.player_physics.keys()
         if deaths and random.randint(1, _SCREAM_CHANCE) == 1:
-            arcade.play_sound(self._scream, volume=get_master_volume() * _SFX_GAIN)
+            arcade.play_sound(self._scream, volume=get_sfx_volume() * _SFX_GAIN)
 
     def _check_explosions(self, prev: GameState | None, curr: GameState) -> None:
         prev_cells = {(e.col, e.row) for e in prev.explosions} if prev else set()
         curr_cells = {(e.col, e.row) for e in curr.explosions}
         if curr_cells - prev_cells:
             arcade.play_sound(
-                random.choice(self._explosions), volume=get_master_volume() * _SFX_GAIN,
+                random.choice(self._explosions), volume=get_sfx_volume() * _SFX_GAIN,
             )
 
     def _check_pickups(self, prev: GameState | None, curr: GameState) -> None:
@@ -146,4 +167,4 @@ class SoundSystem:
             if pos not in curr_positions and pos == player_pos:
                 sound = self._pickups.get(kind)
                 if sound:
-                    arcade.play_sound(sound, volume=get_master_volume() * _SFX_GAIN)
+                    arcade.play_sound(sound, volume=get_sfx_volume() * _SFX_GAIN)

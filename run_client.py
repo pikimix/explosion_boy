@@ -44,7 +44,8 @@ def main() -> None:
     manager = SceneManager()
     manager.push(LobbyScene(
         client, args.name, manager,
-        volume=prefs['volume'],
+        music_volume=prefs['music_volume'],
+        sfx_volume=prefs['sfx_volume'],
         colour_rgb=colour_tuple,
         debug=args.debug,
     ))
