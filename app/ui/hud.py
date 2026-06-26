@@ -1,6 +1,8 @@
 """Per-player HUD: fixed-slot layout so width never grows with powerup state."""
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
 import arcade
 
 from core.state import GameState
@@ -40,7 +42,8 @@ _LEGEND_ENTRIES: list[tuple[str, str, tuple[int, int, int, int]]] = [
     (POWERUP_SYMBOLS[7], 'Super bomb',    POWERUP_COLOURS[7]),
     (POWERUP_SYMBOLS[8], 'Cluster bomb',  POWERUP_COLOURS[8]),
     (POWERUP_SYMBOLS[9], 'Rubble bomb',   POWERUP_COLOURS[9]),
-    (POWERUP_SYMBOLS[10], 'Dizzy (self)', POWERUP_COLOURS[10]),
+    (POWERUP_SYMBOLS[10], 'Dizzy (self)',    POWERUP_COLOURS[10]),
+    (POWERUP_SYMBOLS[11], 'Blast pierce',    POWERUP_COLOURS[11]),
 ]
 
 # Boolean powerup slots shown per player in a fixed row, left-to-right
@@ -68,60 +71,100 @@ def _slot_active(kind_id: int, stats) -> bool:
     }[kind_id](stats)
 
 
+@dataclass
+class _PlayerHud:
+    name:        arcade.Text
+    bombs:       arcade.Text
+    blast:       arcade.Text
+    speed:       arcade.Text
+    penetration: arcade.Text
+    slots:       list[arcade.Text] = field(default_factory=list)
+
+
+_player_huds: dict[int, _PlayerHud] = {}
+
+
+def _make_player_hud(pid: int) -> _PlayerHud:
+    def _text(content: str, x: float, size: int, colour: tuple, bold: bool = False) -> arcade.Text:
+        return arcade.Text(
+            content, x, 0.0,
+            color=colour, font_size=size, bold=bold,
+            anchor_x='left', anchor_y='top',
+        )
+
+    slots = [
+        _text(POWERUP_SYMBOLS[kid], _X + i * _SLOT_SPACING, _SLOT_SIZE, (255, 255, 255, 255))
+        for i, kid in enumerate(_BOOL_SLOT_IDS)
+    ]
+    return _PlayerHud(
+        name=_text(f'P{pid + 1}', _X, _NAME_SIZE, (255, 255, 255, 255), bold=True),
+        bombs=_text('\U0001f4a3 1', _BOMB_X, _STAT_SIZE, (*POWERUP_COLOURS[1][:3], 255)),
+        blast=_text('\U0001f525 2', _BLAST_X, _STAT_SIZE, (*POWERUP_COLOURS[2][:3], 255)),
+        speed=_text('⚡ 0', _SPEED_X, _STAT_SIZE, (*POWERUP_COLOURS[5][:3], 255)),
+        penetration=_text(f'{POWERUP_SYMBOLS[11]} 2', _BLAST_X, _STAT_SIZE, (*POWERUP_COLOURS[11][:3], 255)),
+        slots=slots,
+    )
+
+
 def draw(state: GameState) -> None:
     win = arcade.get_window()
+
+    # Drop cached huds for players who have left
+    for pid in list(_player_huds):
+        if pid not in state.players:
+            del _player_huds[pid]
+
     y = win.height - _TOP_MARGIN
 
     for pid, stats in sorted(state.players.items()):
+        if pid not in _player_huds:
+            _player_huds[pid] = _make_player_hud(pid)
+        hud = _player_huds[pid]
+
         colour = state.player_colours.get(pid, PLAYER_COLOURS[pid % len(PLAYER_COLOURS)][:3])
         name = state.player_names.get(pid, f'P{pid + 1}')
 
-        # Name
-        arcade.draw_text(
-            name, _X, y,
-            color=(*colour[:3], 255),
-            font_size=_NAME_SIZE, bold=True,
-            anchor_x='left', anchor_y='top',
-        )
+        # Name row
+        hud.name.text = name
+        hud.name.color = (*colour[:3], 255)
+        hud.name.y = y
+        hud.name.draw()
         y -= _NAME_H
 
-        # Numeric stats: bombs available, blast radius, speed level
+        # Stat row 1: bombs / blast radius / speed
         available = stats.bomb_capacity - stats.bombs_in_use
-        arcade.draw_text(
-            f'\U0001f4a3 {available}', _BOMB_X, y,
-            color=(*POWERUP_COLOURS[1][:3], 255),
-            font_size=_STAT_SIZE, anchor_x='left', anchor_y='top',
-        )
-        arcade.draw_text(
-            f'\U0001f525 {stats.blast_radius}', _BLAST_X, y,
-            color=(*POWERUP_COLOURS[2][:3], 255),
-            font_size=_STAT_SIZE, anchor_x='left', anchor_y='top',
-        )
-        speed_col = (
+        hud.bombs.text = f'\U0001f4a3 {available}'
+        hud.bombs.y = y
+        hud.bombs.draw()
+
+        hud.blast.text = f'\U0001f525 {stats.blast_radius}'
+        hud.blast.y = y
+        hud.blast.draw()
+
+        hud.speed.text = f'⚡ {stats.speed_level}'
+        hud.speed.color = (
             (*POWERUP_COLOURS[5][:3], 255) if stats.speed_level > 0
             else _greyscale(POWERUP_COLOURS[5])
         )
-        arcade.draw_text(
-            f'⚡ {stats.speed_level}', _SPEED_X, y,
-            color=speed_col,
-            font_size=_STAT_SIZE, anchor_x='left', anchor_y='top',
-        )
+        hud.speed.y = y
+        hud.speed.draw()
+        y -= _STAT_H
+
+        # Stat row 2: blast penetration
+        hud.penetration.text = f'{POWERUP_SYMBOLS[11]} {stats.blast_penetration}'
+        hud.penetration.y = y
+        hud.penetration.draw()
         y -= _STAT_H
 
         # Boolean powerup slots: full colour = active, greyscale = inactive
-        sx = _X
-        for kind_id in _BOOL_SLOT_IDS:
+        for slot_text, kind_id in zip(hud.slots, _BOOL_SLOT_IDS):
             active = _slot_active(kind_id, stats)
-            col = (
+            slot_text.color = (
                 (*POWERUP_COLOURS[kind_id][:3], 255) if active
                 else _greyscale(POWERUP_COLOURS[kind_id])
             )
-            arcade.draw_text(
-                POWERUP_SYMBOLS[kind_id], sx, y,
-                color=col,
-                font_size=_SLOT_SIZE, anchor_x='left', anchor_y='top',
-            )
-            sx += _SLOT_SPACING
+            slot_text.y = y
+            slot_text.draw()
         y -= _SLOT_H + _PLAYER_GAP
 
     _draw_legend(win)

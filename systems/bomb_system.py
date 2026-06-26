@@ -16,9 +16,10 @@ class DetonationEvent:
     row: int
     blast_radius: int
     owner_id: int
-    is_super:   bool = False
-    is_cluster: bool = False
-    is_rubble:  bool = False
+    is_super:          bool = False
+    is_cluster:        bool = False
+    is_rubble:         bool = False
+    blast_penetration: int  = 1
 
 
 def apply_new_bombs(
@@ -59,6 +60,7 @@ def apply_new_bombs(
             is_super=stats.has_super_bomb,
             is_cluster=stats.has_cluster_bomb,
             is_rubble=stats.has_rubble_bomb,
+            blast_penetration=stats.blast_penetration,
         )
         stats.has_super_bomb = False
         stats.has_cluster_bomb = False
@@ -104,6 +106,7 @@ def process_fuses(state: GameState) -> list[DetonationEvent]:
                 is_super=bomb.is_super,
                 is_cluster=bomb.is_cluster,
                 is_rubble=bomb.is_rubble,
+                blast_penetration=bomb.blast_penetration,
             ))
     return detonations
 

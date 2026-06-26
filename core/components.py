@@ -28,6 +28,7 @@ class PowerupKind(IntEnum):
     CLUSTER_BOMB          = 8
     RUBBLE_BOMB           = 9
     REVERSE_CONTROLS_SELF = 10  # affects only the collector
+    BLAST_PENETRATION     = 11  # how many soft blocks one arm can punch through
 
 
 @dataclass
@@ -53,6 +54,7 @@ class PlayerStats:
     has_cluster_bomb:   bool = False
     has_rubble_bomb:    bool = False
     shield_invincibility_ticks: int = 0
+    blast_penetration:  int  = 2  # starts matching blast_radius default
 
 
 @dataclass
@@ -67,9 +69,10 @@ class BombComponent:
     py: float
     vx: float = 0.0
     vy: float = 0.0
-    is_super:   bool = False
-    is_cluster: bool = False
-    is_rubble:  bool = False
+    is_super:          bool = False
+    is_cluster:        bool = False
+    is_rubble:         bool = False
+    blast_penetration: int  = 1
 
 
 @dataclass
