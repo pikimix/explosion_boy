@@ -42,6 +42,14 @@ class GameWindow(arcade.Window):
         if self._scene_manager:
             self._scene_manager.on_mouse_drag(x, y, dx, dy, buttons, modifiers)
 
+    def on_mouse_release(self, x: float, y: float, button: int, modifiers: int) -> None:
+        if self._scene_manager:
+            self._scene_manager.on_mouse_release(x, y, button, modifiers)
+
+    def on_mouse_motion(self, x: float, y: float, dx: float, dy: float) -> None:
+        if self._scene_manager:
+            self._scene_manager.on_mouse_motion(x, y, dx, dy)
+
     def on_text(self, text: str) -> None:
         if self._scene_manager:
             self._scene_manager.on_text(text)

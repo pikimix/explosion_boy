@@ -16,7 +16,7 @@ import arcade.camera
 from arcade.sprite.animated import TextureKeyframe
 
 from app.particle_system import ExplosionParticleSystem
-from app.ui import hud, speed_widget, volume_widget
+from app.ui import hud, speed_widget
 from app.ui.hud import HUD_WIDTH
 from core.components import PowerupKind, TileKind
 from core.state import GameState
@@ -96,7 +96,6 @@ class GameView:
         predicted_y: float | None = None,
         predicted_vx: float | None = None,
         predicted_vy: float | None = None,
-        volume: float = 1.0,
         speed: float | None = None,
     ) -> None:
         now = time.monotonic()
@@ -112,7 +111,6 @@ class GameView:
             self._particles.draw()
             self._draw_players(state, local_player_id, predicted_x, predicted_y, predicted_vx, predicted_vy)
         hud.draw(state)
-        self._draw_volume(volume)
         if speed is not None:
             speed_widget.draw(speed)
 
@@ -271,5 +269,3 @@ class GameView:
                     anchor_x='center', anchor_y='bottom',
                 )
 
-    def _draw_volume(self, volume: float) -> None:
-        volume_widget.draw(volume)

@@ -10,8 +10,7 @@ import arcade.camera
 import arcade.shape_list
 from PIL import Image
 
-from app.sound_system import MusicPlayer, set_master_volume
-from app.ui import volume_widget
+from app.sound_system import SoundSystem
 from app.ui.hud import HUD_WIDTH
 from core.components import TileKind
 from net.client import GameClient
@@ -51,7 +50,8 @@ _SLIDER_SEGMENTS = 24     # gradient segments in brightness slider
 class LobbyScene:
     def __init__(self, client: GameClient, player_name: str,
                  scene_manager: 'SceneManager',  # type: ignore[name-defined]
-                 volume: float = 1.0,
+                 music_volume: float = 1.0,
+                 sfx_volume: float = 1.0,
                  colour_rgb: tuple[int, int, int] | None = None,
                  debug: bool = False) -> None:
         self._client = client
@@ -59,7 +59,6 @@ class LobbyScene:
         self._player_name = player_name
         self._players: list[dict] = []
         self._ready = False
-        self._volume = volume
         self._debug = debug
         self._spawn_shapes: arcade.shape_list.ShapeElementList = (
             arcade.shape_list.ShapeElementList()
@@ -155,9 +154,8 @@ class LobbyScene:
             anchor_x='left', anchor_y='center',
         )
 
-        set_master_volume(self._volume)
-        self._music = MusicPlayer(_LOBBY_MUSIC_PATH)
-        self._music.play()
+        self._sounds = SoundSystem(None, music_volume=music_volume, sfx_volume=sfx_volume,
+                                    music_path=_LOBBY_MUSIC_PATH)
 
         client.send_join(player_name)
 
@@ -324,11 +322,13 @@ class LobbyScene:
                     self._colour_sent = True
                 self._rebuild_spawn_markers()
             elif isinstance(msg, GameStartMsg):
-                self._music.stop()
+                self._sounds.stop()
                 from app.scenes.game_scene import GameScene
                 self._scene_manager.replace(
                     GameScene(self._client, self._scene_manager, self._player_name,
-                              volume=self._volume, colour_rgb=self._colour_rgb,
+                              music_volume=self._sounds.music_volume,
+                              sfx_volume=self._sounds.sfx_volume,
+                              colour_rgb=self._colour_rgb,
                               debug=self._debug, start_state=msg.get_state())
                 )
                 return
@@ -389,8 +389,6 @@ class LobbyScene:
             st.y = y
             st.draw()
             y -= _STATUS_H + _PLAYER_GAP
-
-        volume_widget.draw(self._volume)
 
         # Name input box
         swatch_w = HUD_WIDTH - _HUD_X * 2
@@ -537,19 +535,12 @@ class LobbyScene:
 
         if key == arcade.key.ESCAPE and self._picker_open:
             self._picker_open = False
+        elif key == arcade.key.ESCAPE:
+            from app.scenes.pause_menu_scene import PauseMenuScene
+            self._scene_manager.push(PauseMenuScene(self, self._scene_manager, self._sounds))
         elif key == arcade.key.SPACE:
             self._ready = not self._ready
             self._client.send_ready(self._ready)
-        elif key == arcade.key.BRACKETLEFT:
-            self._volume = round(max(0.0, self._volume - 0.1), 1)
-            user_prefs.set('volume', self._volume)
-            set_master_volume(self._volume)
-            self._music.sync_volume()
-        elif key == arcade.key.BRACKETRIGHT:
-            self._volume = round(min(1.0, self._volume + 0.1), 1)
-            user_prefs.set('volume', self._volume)
-            set_master_volume(self._volume)
-            self._music.sync_volume()
 
     def on_key_release(self, key: int, modifiers: int) -> None:
         pass
