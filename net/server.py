@@ -72,6 +72,8 @@ class GameServer:
         self._last_alive_pids: set[int] = set()
         self._last_2_spawn_tick: int = 0
         self._initial_soft_blocks: int = 0
+        self._last_player_physics: dict = {}
+        self._last_player_colours: dict = {}
 
         self._bus.subscribe(PlayerDiedEvent, self._on_player_died)
 
@@ -190,6 +192,8 @@ class GameServer:
         assert self._space is not None
 
         self._last_alive_pids = set(self._state.players.keys())
+        self._last_player_physics = dict(self._state.player_physics)
+        self._last_player_colours = dict(self._state.player_colours)
         tick = self._clock.advance()
         self._state.tick = tick
         inputs = self._input_buffer.drain(tick, debug=self._debug)
@@ -252,6 +256,22 @@ class GameServer:
             [self._player_names[p] for p in self._last_alive_pids
              if p in self._player_names]
             if winner_id is None else []
+        )
+        # Send the final state reliably before GameOverMsg so clients render
+        # the killing explosion even when it and the player death occur on the
+        # same tick (and the normal unreliable StateUpdateMsg is skipped).
+        # Re-add dead players at their last known position so the captured
+        # freeze-frame shows them inside the explosion.
+        dead_pids = set(self._last_player_physics) - set(self._state.player_physics)
+        for pid in dead_pids:
+            self._state.player_physics[pid] = self._last_player_physics[pid]
+            if pid not in self._state.player_colours and pid in self._last_player_colours:
+                self._state.player_colours[pid] = self._last_player_colours[pid]
+        self._state.player_names = dict(self._player_names)
+        state_bytes = encode_state(self._state)
+        self._transport.broadcast(
+            StateUpdateMsg(tick=self._state.tick, state_bytes=state_bytes).encode(),
+            CHANNEL_RELIABLE,
         )
         self._transport.broadcast(
             GameOverMsg(winner_id=winner_id, winner_name=winner_name,
