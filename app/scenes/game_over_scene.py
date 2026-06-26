@@ -15,7 +15,8 @@ class GameOverScene:
                  music_volume: float = 1.0,
                  sfx_volume: float = 1.0,
                  colour_rgb: tuple[int, int, int] = (220, 50, 50),
-                 debug: bool = False) -> None:
+                 debug: bool = False,
+                 background_texture: arcade.Texture | None = None) -> None:
         self._scene_manager = scene_manager
         self._client = client
         self._result = result
@@ -24,6 +25,7 @@ class GameOverScene:
         self._sfx_volume = sfx_volume
         self._colour_rgb = colour_rgb
         self._debug = debug
+        self._background_texture = background_texture
 
         self._ui = arcade.gui.UIManager()
         self._ui.enable()
@@ -84,6 +86,10 @@ class GameOverScene:
 
     def draw(self) -> None:
         win = arcade.get_window()
+        if self._background_texture:
+            screen_rect = arcade.LRBT(0, win.width, 0, win.height)
+            arcade.draw_texture_rect(self._background_texture, screen_rect)
+            arcade.draw_rect_filled(screen_rect, (0, 0, 0, 160))
         self._headline_text.x = win.width / 2
         self._headline_text.y = win.height / 2 + 100
         self._headline_text.draw()

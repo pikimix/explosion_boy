@@ -40,6 +40,7 @@ class GameScene:
         self._prediction: PredictionEngine | None = None
         self._tick_accum = 0.0
         self._keys: set[int] = set()
+        self._pending_game_over: GameOverMsg | None = None
 
         pid = client.player_id
         state = start_state if start_state is not None else client.get_state()
@@ -59,15 +60,8 @@ class GameScene:
         # Check for non-state messages (game over, reconnect, etc.)
         for msg in self._client.poll_messages():
             if isinstance(msg, GameOverMsg):
-                from app.scenes.game_over_scene import GameOverScene
                 self._sounds.stop()
-                self._scene_manager.replace(
-                    GameOverScene(msg, self._scene_manager, self._client, self._player_name,
-                                  music_volume=self._sounds.music_volume,
-                                  sfx_volume=self._sounds.sfx_volume,
-                                  colour_rgb=self._colour_rgb,
-                                  debug=self._debug)
-                )
+                self._pending_game_over = msg
                 return
             elif isinstance(msg, GameStartMsg):
                 # Reconnected mid-game — reset tick and prediction for spectator role
@@ -128,6 +122,20 @@ class GameScene:
         if self._client.reconnecting:
             from app.ui.overlay import draw_reconnecting
             draw_reconnecting()
+        if self._pending_game_over is not None:
+            from app.scenes.game_over_scene import GameOverScene
+            msg = self._pending_game_over
+            self._pending_game_over = None
+            bg_image = arcade.get_image()
+            bg_texture = arcade.Texture(bg_image, hash=f'game_over_bg_{id(bg_image)}')
+            self._scene_manager.replace(
+                GameOverScene(msg, self._scene_manager, self._client, self._player_name,
+                              music_volume=self._sounds.music_volume,
+                              sfx_volume=self._sounds.sfx_volume,
+                              colour_rgb=self._colour_rgb,
+                              debug=self._debug,
+                              background_texture=bg_texture)
+            )
 
     def on_key_press(self, key: int, modifiers: int) -> None:
         if key == arcade.key.ESCAPE:
