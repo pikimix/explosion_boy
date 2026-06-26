@@ -13,6 +13,7 @@ _POWERUP_WEIGHTS: dict[PowerupKind, int] = {
     PowerupKind.EXTRA_BOMB:            10,
     PowerupKind.BLAST_UP:              10,
     PowerupKind.SPEED_UP:              10,
+    PowerupKind.BLAST_PENETRATION:     10,
     PowerupKind.SHIELD:                 4,
     PowerupKind.REVERSE_CONTROLS:       3,
     PowerupKind.REVERSE_CONTROLS_SELF:  1,
@@ -102,16 +103,20 @@ def _apply(state: GameState, player_id: int, kind: PowerupKind) -> None:
     elif kind == PowerupKind.SPEED_UP:
         stats.speed_level = min(stats.speed_level + 1, SPEED_BOOST_MAX_LEVEL)
     elif kind == PowerupKind.SKULL:
-        effect = random.choice(["speed_down", "bomb_down", "blast_down"])
+        effect = random.choice(["speed_down", "bomb_down", "blast_down", "penetration_down"])
         if effect == "speed_down":
             stats.speed_level = max(0, stats.speed_level - 1)
         elif effect == "bomb_down":
             stats.bomb_capacity = max(1, stats.bomb_capacity - 1)
-        else:
+        elif effect == "blast_down":
             stats.blast_radius = max(1, stats.blast_radius - 1)
+        else:
+            stats.blast_penetration = max(1, stats.blast_penetration - 1)
     elif kind == PowerupKind.SUPER_BOMB:
         stats.has_super_bomb = True
     elif kind == PowerupKind.CLUSTER_BOMB:
         stats.has_cluster_bomb = True
     elif kind == PowerupKind.RUBBLE_BOMB:
         stats.has_rubble_bomb = True
+    elif kind == PowerupKind.BLAST_PENETRATION:
+        stats.blast_penetration += 1

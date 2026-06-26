@@ -34,7 +34,7 @@ def process_detonations(
 ) -> None:
     queue: deque[DetonationEvent] = deque(detonations)
     processed_indices: set[int] = set()
-    cluster_origins: list[tuple[int, int, int]] = []
+    cluster_origins: list[tuple[int, int, int, int]] = []
     bomb_by_cell: dict[tuple[int, int], int] = {
         (b.col, b.row): bi for bi, b in enumerate(state.bombs)
     }
@@ -58,6 +58,7 @@ def process_detonations(
 
             for dc, dr in _DIRECTIONS:
                 ray_len = 0
+                blocks_destroyed = 0
                 for dist in range(1, det.blast_radius + 1):
                     c = det.col + dc * dist
                     r = det.row + dr * dist
@@ -76,7 +77,10 @@ def process_detonations(
                         maybe_drop_powerup(state, c, r)
                         space.remove_wall(c, r)
                         ray_len = dist
-                        break
+                        blocks_destroyed += 1
+                        if blocks_destroyed >= det.blast_penetration:
+                            break
+                        continue  # penetrate through the now-empty block
 
                     # Check for chain-reacting bomb at this cell
                     bi = bomb_by_cell.get((c, r))
@@ -90,6 +94,7 @@ def process_detonations(
                             is_super=bomb.is_super,
                             is_cluster=bomb.is_cluster,
                             is_rubble=bomb.is_rubble,
+                            blast_penetration=bomb.blast_penetration,
                         ))
 
                     ray_len = dist
@@ -102,7 +107,7 @@ def process_detonations(
                     ))
 
         if det.is_cluster:
-            cluster_origins.append((det.col, det.row, det.blast_radius))
+            cluster_origins.append((det.col, det.row, det.blast_radius, det.blast_penetration))
 
     remove_bombs(state, space, list(processed_indices))
     if cluster_origins:
@@ -202,7 +207,7 @@ def _spawn_cluster_sub_bombs(
     from engine.config import TILE_SIZE
     from systems.powerup_system import CLUSTER_SUB_FUSE_TICKS
 
-    for col, row, blast_radius in origins:
+    for col, row, blast_radius, blast_penetration in origins:
         bomb_cells = {(b.col, b.row) for b in state.bombs}
         for dc, dr in _DIRECTIONS:
             for dist in range(1, 4):
@@ -222,6 +227,7 @@ def _spawn_cluster_sub_bombs(
                     fuse_ticks_remaining=CLUSTER_SUB_FUSE_TICKS,
                     blast_radius=blast_radius,
                     col=c, row=r, px=px, py=py,
+                    blast_penetration=blast_penetration,
                 )
                 state.bombs.append(sub)
                 space.add_bomb(len(state.bombs) - 1, px, py)
