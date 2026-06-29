@@ -16,7 +16,6 @@ from collections import deque
 
 from core.components import PlayerInput, PhysicsState
 from core.state import GameState
-from core.tick import TICK_DT
 from engine.config import MAX_PLAYER_SPEED, TILE_SIZE
 from engine.physics import PhysicsSpace
 
@@ -26,8 +25,9 @@ _SNAP_THRESHOLD = TILE_SIZE * 0.6
 
 
 class PredictionEngine:
-    def __init__(self, local_player_id: int) -> None:
+    def __init__(self, local_player_id: int, tick_rate: int = 60) -> None:
         self._pid = local_player_id
+        self._tick_dt: float = 1.0 / tick_rate
         self._space: PhysicsSpace = PhysicsSpace()
         self._pending: deque[PlayerInput] = deque()
         self._predicted_x: float = 0.0
@@ -55,7 +55,7 @@ class PredictionEngine:
         Only snap when they genuinely diverge — wall clips, real desync.
 
         Comparing replayed vs predicted (rather than server vs predicted) is
-        important because the server is always INPUT_LEAD_TICKS behind by
+        important because the server is always several lead ticks behind by
         design, so server vs predicted is always large while moving and would
         incorrectly trigger a hard-snap on every reconcile.
         """
@@ -155,7 +155,7 @@ class PredictionEngine:
             mx, my = mx / mag, my / mag
         self._space.set_player_velocity(self._pid, mx * MAX_PLAYER_SPEED,
                                         my * MAX_PLAYER_SPEED)
-        self._space.step(TICK_DT)
+        self._space.step(self._tick_dt)
         pos = self._space.get_player_position(self._pid)
         if pos:
             self._predicted_x, self._predicted_y = pos

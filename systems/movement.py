@@ -5,7 +5,6 @@ import math
 
 from core.components import PlayerInput, PhysicsState
 from core.state import GameState
-from core.tick import TICK_DT
 from engine.config import MAX_PLAYER_SPEED
 from engine.physics import PhysicsSpace
 
@@ -14,6 +13,7 @@ def process_movement(
     state: GameState,
     space: PhysicsSpace,
     inputs: list[PlayerInput],
+    tick_dt: float,
 ) -> None:
     for inp in inputs:
         stats = state.players.get(inp.player_id)
@@ -39,7 +39,7 @@ def process_movement(
         vy = my * speed
         space.set_player_velocity(inp.player_id, vx, vy)
 
-    space.step(TICK_DT)
+    space.step(tick_dt)
 
     # Write physics results back to GameState
     for pid in list(state.players.keys()):

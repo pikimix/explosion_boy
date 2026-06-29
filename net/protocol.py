@@ -98,14 +98,16 @@ class InputMsg:
 @dataclass
 class WelcomeMsg:
     assigned_player_id: int
+    tick_rate: int = 60
     TYPE: str = "welcome"
 
     def encode(self) -> bytes:
-        return encode_msg({"type": self.TYPE, "pid": self.assigned_player_id})
+        return encode_msg({"type": self.TYPE, "pid": self.assigned_player_id,
+                           "tr": self.tick_rate})
 
     @staticmethod
     def decode(d: dict) -> "WelcomeMsg":
-        return WelcomeMsg(assigned_player_id=d["pid"])
+        return WelcomeMsg(assigned_player_id=d["pid"], tick_rate=d.get("tr", 60))
 
 
 @dataclass

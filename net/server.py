@@ -14,8 +14,9 @@ def _ts() -> str:
 
 from core.clock import TickClock
 from core.components import GamePhase, PlayerInput
-from core.serialiser import encode_state
+from core.serialiser import decode_state, encode_state
 from core.state import GameState
+from core.tick import TickNumber
 from net.lobby import LobbyManager
 from net.protocol import (
     ColourMsg,
@@ -28,7 +29,6 @@ from net.protocol import (
     StateUpdateMsg,
     decode_any,
 )
-from engine.config import TICK_RATE
 from engine.physics import PhysicsSpace
 from engine.transport import (
     CHANNEL_RELIABLE,
@@ -57,17 +57,30 @@ from systems.powerup_system import (
 
 
 class GameServer:
-    def __init__(self, transport: ServerTransport, debug: bool = False) -> None:
+    def __init__(
+        self,
+        transport: ServerTransport,
+        tick_rate: int = 60,
+        rollback_buffer_size: int = 120,
+        debug: bool = False,
+    ) -> None:
         self._transport = transport
         self._debug = debug
-        self._clock = TickClock()
+        self._tick_rate = tick_rate
+        self._tick_dt = 1.0 / tick_rate
+        self._rollback_buffer_size = rollback_buffer_size
+        self._clock = TickClock(tick_rate)
         self._state: GameState | None = None
         self._space: PhysicsSpace | None = None
         self._input_buffer = InputBuffer()
         self._bus = EventBus()
-        self._lobby = LobbyManager(transport)
+        self._lobby = LobbyManager(transport, tick_rate)
         self._peer_to_player: dict[UUID, int] = {}
         self._player_names: dict[int, str] = {}
+
+        # Rollback state
+        self._snapshots: dict[TickNumber, bytes] = {}
+        self._input_log: dict[TickNumber, list[PlayerInput]] = {}
 
         self._last_alive_pids: set[int] = set()
         self._last_2_spawn_tick: int = 0
@@ -78,7 +91,8 @@ class GameServer:
         self._bus.subscribe(PlayerDiedEvent, self._on_player_died)
 
     def run(self) -> None:
-        print(f"[{_ts()}] Server running at {TICK_RATE} tps. Waiting for players…")
+        print(f"[{_ts()}] Server running at {self._tick_rate} tps "
+              f"(rollback window: {self._rollback_buffer_size} ticks). Waiting for players…")
         while True:
             if self._state is not None and self._state.phase == GamePhase.PLAYING:
                 timeout = self._clock.seconds_until_next_tick()
@@ -142,12 +156,22 @@ class GameServer:
         elif isinstance(msg, InputMsg):
             if self._state and self._state.phase == GamePhase.PLAYING:
                 pid = self._peer_to_player.get(peer_id)
-                if pid is not None:
-                    self._input_buffer.push(PlayerInput(
-                        player_id=pid, tick=msg.tick,
-                        move_x=msg.move_x, move_y=msg.move_y,
-                        place_bomb=msg.place_bomb,
-                    ))
+                if pid is None:
+                    return
+                inp = PlayerInput(
+                    player_id=pid, tick=msg.tick,
+                    move_x=msg.move_x, move_y=msg.move_y,
+                    place_bomb=msg.place_bomb,
+                )
+                current = self._clock.current_tick
+                if inp.tick < current:
+                    # Late input — replay from the saved snapshot if within window
+                    late_by = current - inp.tick
+                    if late_by <= self._rollback_buffer_size:
+                        self._replay_from(inp.tick, inp)
+                    # else: too old, discard silently
+                else:
+                    self._input_buffer.push(inp)
 
     def _on_disconnect(self, peer_id: UUID) -> None:
         self._lobby.on_disconnect(peer_id)
@@ -182,6 +206,8 @@ class GameServer:
         self._space = space
 
         self._clock.reset()
+        self._snapshots.clear()
+        self._input_log.clear()
         self._lobby.broadcast_game_start(state)
         print(f"[{_ts()}] Game started with {len(state.players)} players.")
 
@@ -198,7 +224,37 @@ class GameServer:
         self._state.tick = tick
         inputs = self._input_buffer.drain(tick, debug=self._debug)
 
-        process_movement(self._state, self._space, inputs)
+        self._input_log[tick] = inputs
+        self._run_tick(tick, inputs)
+
+        if self._state is None:
+            return
+
+        state_bytes = encode_state(self._state)
+        self._snapshots[tick] = state_bytes
+
+        # Evict entries outside the rollback window
+        evict = tick - self._rollback_buffer_size
+        self._snapshots.pop(evict, None)
+        self._input_log.pop(evict, None)
+
+        self._transport.broadcast(
+            StateUpdateMsg(tick=tick, state_bytes=state_bytes).encode(),
+            CHANNEL_UNRELIABLE,
+        )
+
+    def _run_tick(self, tick: int, inputs: list[PlayerInput]) -> None:
+        """Execute one tick of game logic with the given inputs.
+
+        Does not advance the clock, save snapshots, or broadcast — the caller
+        is responsible for those so this method can be used both for normal
+        ticks and for rollback replay.
+        """
+        if self._state is None or self._space is None:
+            return
+
+        self._state.tick = tick
+        process_movement(self._state, self._space, inputs, self._tick_dt)
         sync_grid_positions(self._state)
         tick_explosions(self._state, self._bus)
         apply_new_bombs(self._state, self._space, inputs)
@@ -214,13 +270,64 @@ class GameServer:
 
         if self._state is None:
             return
-
         self._state.player_names = dict(self._player_names)
-        state_bytes = encode_state(self._state)
-        self._transport.broadcast(
-            StateUpdateMsg(tick=tick, state_bytes=state_bytes).encode(),
-            CHANNEL_UNRELIABLE,
-        )
+
+    # ── Rollback ──────────────────────────────────────────────────────────────
+
+    def _replay_from(self, rollback_tick: TickNumber, late_inp: PlayerInput) -> None:
+        """Restore state from snapshot at rollback_tick-1 and re-simulate forward."""
+        prev_snap = self._snapshots.get(rollback_tick - 1)
+        if prev_snap is None:
+            if self._debug:
+                print(f"[{_ts()}] Rollback: no snapshot for tick {rollback_tick - 1}, discarding late input")
+            return
+
+        current_tick = self._clock.current_tick
+        if self._debug:
+            print(f"[{_ts()}] Rollback: replaying ticks {rollback_tick}..{current_tick} "
+                  f"(late input from player {late_inp.player_id})")
+
+        self._state = decode_state(prev_snap)
+        self._space = self._rebuild_space_from_state(self._state)
+
+        for t in range(rollback_tick, current_tick + 1):
+            inputs = list(self._input_log.get(t, []))
+            if t == rollback_tick:
+                # Inject the late input, replacing the neutral that ran originally
+                inputs = [
+                    late_inp if p.player_id == late_inp.player_id else p
+                    for p in inputs
+                ]
+                if not any(p.player_id == late_inp.player_id for p in inputs):
+                    inputs.append(late_inp)
+
+            self._run_tick(t, inputs)
+
+            if self._state is None:
+                break  # game ended during replay
+
+            state_bytes = encode_state(self._state)
+            self._snapshots[t] = state_bytes
+            self._input_log[t] = inputs
+
+        if self._state is not None:
+            self._transport.broadcast(
+                StateUpdateMsg(
+                    tick=current_tick,
+                    state_bytes=self._snapshots[current_tick],
+                ).encode(),
+                CHANNEL_UNRELIABLE,
+            )
+
+    def _rebuild_space_from_state(self, state: GameState) -> PhysicsSpace:
+        """Create a fresh PhysicsSpace populated from a GameState snapshot."""
+        space = PhysicsSpace()
+        space.rebuild_static_walls(state.tiles)
+        for pid, phys in state.player_physics.items():
+            space.add_player(pid, phys.x, phys.y)
+        for i, bomb in enumerate(state.bombs):
+            space.add_bomb(i, bomb.px, bomb.py)
+        return space
 
     # ── Last-two powerup surge ────────────────────────────────────────────────
 
@@ -289,5 +396,7 @@ class GameServer:
         self._player_names.clear()
         self._last_2_spawn_tick = 0
         self._initial_soft_blocks = 0
+        self._snapshots.clear()
+        self._input_log.clear()
         self._lobby.reset()
         print(f"[{_ts()}] Server reset. Waiting for players…")

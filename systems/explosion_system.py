@@ -10,7 +10,6 @@ from core.components import (
     TileKind,
 )
 from core.state import GameState
-from core.tick import TICK_DT
 from engine.config import EXPLOSION_DURATION_TICKS, TILE_SIZE
 from engine.physics import PhysicsSpace
 from systems.bomb_system import DetonationEvent, remove_bombs

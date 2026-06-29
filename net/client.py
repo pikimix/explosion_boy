@@ -42,6 +42,7 @@ class GameClient:
     def __init__(self, transport: ClientTransport) -> None:
         self._transport = transport
         self._player_id: int | None = None
+        self._tick_rate: int = 60
         self._player_name: str = ""
         self._last_state: GameState | None = None
         self._last_state_tick: int = -1
@@ -58,6 +59,10 @@ class GameClient:
     @property
     def player_id(self) -> int | None:
         return self._player_id
+
+    @property
+    def tick_rate(self) -> int:
+        return self._tick_rate
 
     @property
     def connected(self) -> bool:
@@ -164,6 +169,7 @@ class GameClient:
     def _handle_msg(self, msg: AnyMsg) -> None:
         if isinstance(msg, WelcomeMsg):
             self._player_id = msg.assigned_player_id
+            self._tick_rate = msg.tick_rate
         elif isinstance(msg, (GameStartMsg, LobbyUpdateMsg, GameOverMsg)):
             if isinstance(msg, GameStartMsg):
                 state = msg.get_state()

@@ -6,14 +6,20 @@ WINDOW_H = 900
 WINDOW_TITLE = "Explosion Boy"
 
 TARGET_FPS = 60
-TICK_RATE = 20          # server authoritative ticks per second
-INPUT_LEAD_TICKS = 5    # client tick counter runs this many ticks ahead of server
+TICK_RATE = 60          # server authoritative ticks per second (negotiated at connection time)
+ROLLBACK_BUFFER_SIZE = 120  # server keeps this many tick snapshots (~2 s at 60 tps)
+# Dynamic lead ticks (derived from measured RTT in GameScene); these are the clamp bounds.
+MIN_LEAD_TICKS = 2
+MAX_LEAD_TICKS = 10
+DEFAULT_LEAD_TICKS = 4   # used until the first RTT sample arrives
 DEFAULT_PORT = 9000
 MAX_PLAYERS = 16
 
-BOMB_FUSE_TICKS = 60            # 3 seconds at 20 tps
+BOMB_FUSE_SECONDS = 3.0
+EXPLOSION_DURATION_SECONDS = 0.5
+BOMB_FUSE_TICKS = round(BOMB_FUSE_SECONDS * TICK_RATE)        # 180 at 60 tps
 DEFAULT_BLAST_RADIUS = 2
-EXPLOSION_DURATION_TICKS = 10
+EXPLOSION_DURATION_TICKS = round(EXPLOSION_DURATION_SECONDS * TICK_RATE)  # 30 at 60 tps
 SOFT_BLOCK_DROP_CHANCE = 0.25
 
 MAX_PLAYER_SPEED = 180.0        # pixels per second
