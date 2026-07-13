@@ -27,6 +27,7 @@ from net.protocol import (
     JoinMsg,
     LobbyUpdateMsg,
     ReadyMsg,
+    RejectMsg,
     RenameMsg,
     StateUpdateMsg,
     WelcomeMsg,
@@ -51,6 +52,7 @@ class GameClient:
         self._message_queue: deque[AnyMsg] = deque()
         self._running = True
         self._reconnecting = False
+        self._reject_reason: str | None = None
         self._thread = threading.Thread(target=self._net_loop, daemon=True)
         self._thread.start()
 
@@ -71,6 +73,10 @@ class GameClient:
     @property
     def reconnecting(self) -> bool:
         return self._reconnecting
+
+    @property
+    def reject_reason(self) -> str | None:
+        return self._reject_reason
 
     def get_state(self) -> GameState | None:
         with self._lock:
@@ -167,7 +173,10 @@ class GameClient:
                     self._transport.send(inp.encode(), CHANNEL_RELIABLE)
 
     def _handle_msg(self, msg: AnyMsg) -> None:
-        if isinstance(msg, WelcomeMsg):
+        if isinstance(msg, RejectMsg):
+            self._reject_reason = msg.reason
+            self._running = False
+        elif isinstance(msg, WelcomeMsg):
             self._player_id = msg.assigned_player_id
             self._tick_rate = msg.tick_rate
         elif isinstance(msg, (GameStartMsg, LobbyUpdateMsg, GameOverMsg)):

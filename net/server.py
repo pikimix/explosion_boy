@@ -24,7 +24,9 @@ from net.protocol import (
     GameStartMsg,
     InputMsg,
     JoinMsg,
+    PROTOCOL_VERSION,
     ReadyMsg,
+    RejectMsg,
     RenameMsg,
     StateUpdateMsg,
     decode_any,
@@ -122,6 +124,17 @@ class GameServer:
             return
 
         if isinstance(msg, JoinMsg):
+            if msg.version != PROTOCOL_VERSION:
+                self._transport.send(
+                    peer_id,
+                    RejectMsg(
+                        reason=f"Protocol version mismatch: client={msg.version}, server={PROTOCOL_VERSION}"
+                    ).encode(),
+                    CHANNEL_RELIABLE,
+                )
+                self._transport.disconnect(peer_id)
+                print(f"[{_ts()}] Rejected peer {peer_id}: version {msg.version} != {PROTOCOL_VERSION}")
+                return
             self._lobby.on_join(peer_id, msg.player_name)
             pid = self._lobby.peer_to_player_id(peer_id)
             if pid is not None:
