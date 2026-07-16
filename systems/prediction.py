@@ -153,8 +153,8 @@ class PredictionEngine:
         mag = (mx * mx + my * my) ** 0.5
         if mag > 1.0:
             mx, my = mx / mag, my / mag
-        self._space.set_player_velocity(self._pid, mx * MAX_PLAYER_SPEED,
-                                        my * MAX_PLAYER_SPEED)
+        speed = MAX_PLAYER_SPEED * (1 + stats.speed_level * 0.3) if stats else MAX_PLAYER_SPEED
+        self._space.set_player_velocity(self._pid, mx * speed, my * speed)
         self._space.step(self._tick_dt)
         pos = self._space.get_player_position(self._pid)
         if pos:
