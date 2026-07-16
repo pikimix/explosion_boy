@@ -27,6 +27,7 @@ from net.protocol import (
     JoinMsg,
     LobbyUpdateMsg,
     ReadyMsg,
+    RejectMsg,
     RenameMsg,
     StateUpdateMsg,
     WelcomeMsg,
@@ -42,6 +43,7 @@ class GameClient:
     def __init__(self, transport: ClientTransport) -> None:
         self._transport = transport
         self._player_id: int | None = None
+        self._tick_rate: int = 60
         self._player_name: str = ""
         self._last_state: GameState | None = None
         self._last_state_tick: int = -1
@@ -50,6 +52,7 @@ class GameClient:
         self._message_queue: deque[AnyMsg] = deque()
         self._running = True
         self._reconnecting = False
+        self._reject_reason: str | None = None
         self._thread = threading.Thread(target=self._net_loop, daemon=True)
         self._thread.start()
 
@@ -60,12 +63,20 @@ class GameClient:
         return self._player_id
 
     @property
+    def tick_rate(self) -> int:
+        return self._tick_rate
+
+    @property
     def connected(self) -> bool:
         return self._transport.connected
 
     @property
     def reconnecting(self) -> bool:
         return self._reconnecting
+
+    @property
+    def reject_reason(self) -> str | None:
+        return self._reject_reason
 
     def get_state(self) -> GameState | None:
         with self._lock:
@@ -162,8 +173,12 @@ class GameClient:
                     self._transport.send(inp.encode(), CHANNEL_RELIABLE)
 
     def _handle_msg(self, msg: AnyMsg) -> None:
-        if isinstance(msg, WelcomeMsg):
+        if isinstance(msg, RejectMsg):
+            self._reject_reason = msg.reason
+            self._running = False
+        elif isinstance(msg, WelcomeMsg):
             self._player_id = msg.assigned_player_id
+            self._tick_rate = msg.tick_rate
         elif isinstance(msg, (GameStartMsg, LobbyUpdateMsg, GameOverMsg)):
             if isinstance(msg, GameStartMsg):
                 state = msg.get_state()

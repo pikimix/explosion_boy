@@ -27,8 +27,9 @@ class _LobbyPlayer:
 
 
 class LobbyManager:
-    def __init__(self, transport: ServerTransport) -> None:
+    def __init__(self, transport: ServerTransport, tick_rate: int = 60) -> None:
         self._transport = transport
+        self._tick_rate = tick_rate
         self._players: dict[UUID, _LobbyPlayer] = {}
 
     # ── Incoming message handlers ─────────────────────────────────────────────
@@ -42,7 +43,7 @@ class LobbyManager:
         self._players[peer_id] = _LobbyPlayer(peer_id, pid, name, colour_rgb=initial_colour)
         self._transport.send(
             peer_id,
-            WelcomeMsg(assigned_player_id=pid).encode(),
+            WelcomeMsg(assigned_player_id=pid, tick_rate=self._tick_rate).encode(),
             CHANNEL_RELIABLE,
         )
         self._broadcast_lobby()

@@ -304,6 +304,8 @@ class LobbyScene:
 
     def update(self, dt: float) -> None:
         self._cursor_blink = (self._cursor_blink + dt) % 1.0
+        if self._client.reject_reason is not None:
+            return
         for msg in self._client.poll_messages():
             if isinstance(msg, LobbyUpdateMsg):
                 self._players = msg.players
@@ -347,7 +349,10 @@ class LobbyScene:
         self._draw_hud()
         if self._picker_open:
             self._draw_picker_popup()
-        if self._client.reconnecting:
+        if self._client.reject_reason is not None:
+            from app.ui.overlay import draw_rejected
+            draw_rejected(self._client.reject_reason)
+        elif self._client.reconnecting:
             from app.ui.overlay import draw_reconnecting
             draw_reconnecting()
 

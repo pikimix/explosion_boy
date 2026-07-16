@@ -13,20 +13,23 @@ from typing import Any
 from core.serialiser import decode_msg, encode_msg, encode_state, decode_state
 from core.state import GameState
 
+PROTOCOL_VERSION: int = 1
 
 # ── Client → Server ────────────────────────────────────────────────────────────
 
 @dataclass
 class JoinMsg:
     player_name: str
+    version: int = PROTOCOL_VERSION
     TYPE: str = "join"
 
     def encode(self) -> bytes:
-        return encode_msg({"type": self.TYPE, "name": self.player_name})
+        return encode_msg({"type": self.TYPE, "name": self.player_name,
+                           "v": self.version})
 
     @staticmethod
     def decode(d: dict) -> "JoinMsg":
-        return JoinMsg(player_name=d["name"])
+        return JoinMsg(player_name=d["name"], version=d.get("v", 0))
 
 
 @dataclass
@@ -96,16 +99,31 @@ class InputMsg:
 # ── Server → Client ────────────────────────────────────────────────────────────
 
 @dataclass
+class RejectMsg:
+    reason: str
+    TYPE: str = "reject"
+
+    def encode(self) -> bytes:
+        return encode_msg({"type": self.TYPE, "reason": self.reason})
+
+    @staticmethod
+    def decode(d: dict) -> "RejectMsg":
+        return RejectMsg(reason=d.get("reason", "Rejected by server"))
+
+
+@dataclass
 class WelcomeMsg:
     assigned_player_id: int
+    tick_rate: int = 60
     TYPE: str = "welcome"
 
     def encode(self) -> bytes:
-        return encode_msg({"type": self.TYPE, "pid": self.assigned_player_id})
+        return encode_msg({"type": self.TYPE, "pid": self.assigned_player_id,
+                           "tr": self.tick_rate})
 
     @staticmethod
     def decode(d: dict) -> "WelcomeMsg":
-        return WelcomeMsg(assigned_player_id=d["pid"])
+        return WelcomeMsg(assigned_player_id=d["pid"], tick_rate=d.get("tr", 60))
 
 
 @dataclass
@@ -174,8 +192,8 @@ class GameOverMsg:
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
-AnyMsg = (JoinMsg | ReadyMsg | ColourMsg | RenameMsg | InputMsg | WelcomeMsg | LobbyUpdateMsg
-          | GameStartMsg | StateUpdateMsg | GameOverMsg)
+AnyMsg = (JoinMsg | ReadyMsg | ColourMsg | RenameMsg | InputMsg | RejectMsg | WelcomeMsg
+          | LobbyUpdateMsg | GameStartMsg | StateUpdateMsg | GameOverMsg)
 
 _DECODERS = {
     "join":         JoinMsg.decode,
@@ -183,6 +201,7 @@ _DECODERS = {
     "colour":       ColourMsg.decode,
     "rename":       RenameMsg.decode,
     "input":        InputMsg.decode,
+    "reject":       RejectMsg.decode,
     "welcome":      WelcomeMsg.decode,
     "lobby_update": LobbyUpdateMsg.decode,
     "game_start":   GameStartMsg.decode,

@@ -76,6 +76,7 @@ class GameView:
             )
             for kind, symbol in POWERUP_SYMBOLS.items()
         }
+        self._dizzy_texts: dict[int, arcade.Text] = {}
 
     def _make_camera(self, width: float, height: float) -> arcade.camera.Camera2D:
         play_w = width - HUD_WIDTH
@@ -234,6 +235,9 @@ class GameView:
         for pid in list(self._player_sprites):
             if pid not in current_pids:
                 del self._player_sprites[pid]
+        for pid in list(self._dizzy_texts):
+            if pid not in current_pids:
+                del self._dizzy_texts[pid]
 
         for pid, phys in state.player_physics.items():
             if pid not in self._player_sprites:
@@ -262,10 +266,14 @@ class GameView:
 
             stats = state.players.get(pid)
             if stats is not None and stats.reversed_controls_ticks > 0:
-                arcade.draw_text(
-                    '\U0001f635',
-                    sprite.center_x, sprite.center_y + _PLAYER_DRAW_SIZE * 0.55,
-                    font_size=14,
-                    anchor_x='center', anchor_y='bottom',
-                )
+                if pid not in self._dizzy_texts:
+                    self._dizzy_texts[pid] = arcade.Text(
+                        '\U0001f635', 0, 0,
+                        font_size=14,
+                        anchor_x='center', anchor_y='bottom',
+                    )
+                text_obj = self._dizzy_texts[pid]
+                text_obj.x = sprite.center_x
+                text_obj.y = sprite.center_y + _PLAYER_DRAW_SIZE * 0.55
+                text_obj.draw()
 

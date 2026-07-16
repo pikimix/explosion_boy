@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import time
 
-from core.tick import TICK_DT, TickNumber
+from core.tick import TickNumber
 
 
 class TickClock:
-    def __init__(self) -> None:
+    def __init__(self, tick_rate: int = 60) -> None:
         self._tick: TickNumber = 0
+        self._tick_dt: float = 1.0 / tick_rate
         self._last_tick_time: float = time.monotonic()
 
     @property
@@ -16,7 +17,7 @@ class TickClock:
         return self._tick
 
     def should_tick(self) -> bool:
-        return time.monotonic() - self._last_tick_time >= TICK_DT
+        return time.monotonic() - self._last_tick_time >= self._tick_dt
 
     def reset(self) -> None:
         """Reset the clock to now so no ticks are owed for past lobby wait time."""
@@ -24,15 +25,15 @@ class TickClock:
         self._tick = 0
 
     def advance(self) -> TickNumber:
-        self._last_tick_time += TICK_DT
+        self._last_tick_time += self._tick_dt
         self._tick += 1
         return self._tick
 
     def seconds_until_next_tick(self) -> float:
-        return max(0.0, self._last_tick_time + TICK_DT - time.monotonic())
+        return max(0.0, self._last_tick_time + self._tick_dt - time.monotonic())
 
     def ticks_for_seconds(self, seconds: float) -> int:
-        return max(1, round(seconds / TICK_DT))
+        return max(1, round(seconds / self._tick_dt))
 
     def elapsed_since(self, tick: TickNumber) -> int:
         return self._tick - tick

@@ -1,5 +1,8 @@
-"""Active game scene. Bridges arcade 60fps render loop and server 20tps snapshots."""
+"""Active game scene. Bridges arcade 60fps render loop and server tick snapshots."""
 from __future__ import annotations
+
+import math
+import time
 
 import arcade
 from datetime import datetime
@@ -14,9 +17,12 @@ from core.components import PlayerInput
 from core.state import GameState
 from net.client import GameClient
 from net.protocol import GameOverMsg, GameStartMsg, InputMsg
-from engine.config import INPUT_LEAD_TICKS, TICK_RATE
+from engine.config import MIN_LEAD_TICKS, MAX_LEAD_TICKS, DEFAULT_LEAD_TICKS
 from engine import user_prefs
 from systems.prediction import PredictionEngine
+
+# EWMA smoothing factor for RTT — matches TCP's default (slow to react, spike-resistant)
+_RTT_ALPHA = 0.125
 
 
 class GameScene:
@@ -42,19 +48,29 @@ class GameScene:
         self._keys: set[int] = set()
         self._pending_game_over: GameOverMsg | None = None
 
+        # RTT measurement — keyed by the tick number we sent the input for
+        self._send_times: dict[int, float] = {}
+        self._smoothed_rtt: float | None = None
+
+        tick_rate = client.tick_rate
         pid = client.player_id
         state = start_state if start_state is not None else client.get_state()
-        # Base _tick on the most recently received server tick, not the game-start
-        # tick (which may be 0 or stale by the time the first update() fires).
-        # Using the latest state prevents inputs being sent for ticks the server
-        # has already processed.
         current = client.get_state()
         base_tick = current.tick if current else (state.tick if state else 0)
-        self._tick = base_tick + INPUT_LEAD_TICKS
+        self._tick = base_tick + DEFAULT_LEAD_TICKS
         if pid is not None:
-            self._prediction = PredictionEngine(pid)
+            self._prediction = PredictionEngine(pid, tick_rate)
             if state:
                 self._prediction.reconcile(state)
+
+    @property
+    def _lead_ticks(self) -> int:
+        """Compute optimal lead from smoothed RTT; fall back to DEFAULT_LEAD_TICKS."""
+        if self._smoothed_rtt is None:
+            return DEFAULT_LEAD_TICKS
+        tick_dt = 1.0 / self._client.tick_rate
+        one_way_s = self._smoothed_rtt * 0.5
+        return max(MIN_LEAD_TICKS, min(MAX_LEAD_TICKS, math.ceil(one_way_s / tick_dt) + 1))
 
     def update(self, dt: float) -> None:
         # Check for non-state messages (game over, reconnect, etc.)
@@ -66,9 +82,12 @@ class GameScene:
             elif isinstance(msg, GameStartMsg):
                 # Reconnected mid-game — reset tick and prediction for spectator role
                 state = self._client.get_state()
-                self._tick = (state.tick if state else 0) + INPUT_LEAD_TICKS
+                tick_rate = self._client.tick_rate
+                self._tick = (state.tick if state else 0) + DEFAULT_LEAD_TICKS
+                self._send_times.clear()
+                self._smoothed_rtt = None
                 pid = self._client.player_id
-                self._prediction = PredictionEngine(pid) if pid is not None else None
+                self._prediction = PredictionEngine(pid, tick_rate) if pid is not None else None
                 if self._prediction and state:
                     self._prediction.reconcile(state)
 
@@ -81,19 +100,25 @@ class GameScene:
             self._prev_state = state
             self._last_sound_tick = state.tick
 
-        # Generate and send input at tick rate
-        # Cap dt to one tick so a slow first frame (e.g. asset loading) never
-        # fires a catch-up burst that inflates the client lead permanently.
-        tick_dt = 1.0 / TICK_RATE
+        # Update RTT estimate from confirmed server tick
+        if state:
+            self._update_rtt(state.tick)
+
+        tick_dt = 1.0 / self._client.tick_rate
 
         # Guard: if the client tick has fallen behind the server (lead < 1),
         # hard-resync so subsequent inputs land in the server's future.
-        # This recovers from startup races and any accumulated clock drift.
         if state and (self._tick - state.tick) < 1:
             old_tick = self._tick
-            self._tick = state.tick + INPUT_LEAD_TICKS
+            self._tick = state.tick + self._lead_ticks
             if self._debug:
                 print(f"[{_ts()}] [client pid={self._client.player_id}] tick resync: {old_tick} → {self._tick} (server={state.tick})")
+
+        # Advance lead tick counter to match target lead; never go backwards
+        if state:
+            target = state.tick + self._lead_ticks
+            if self._tick < target:
+                self._tick = target
 
         self._tick_accum += min(dt, tick_dt)
         while self._tick_accum >= tick_dt:
@@ -102,8 +127,11 @@ class GameScene:
             self._send_input(self._tick)
             if self._debug and state:
                 lead = self._tick - state.tick
-                if lead != 0 and self._tick % 20 == 0:
-                    print(f"[{_ts()}] [client pid={self._client.player_id}] client_tick={self._tick} server_tick={state.tick} lead={lead} (expected {INPUT_LEAD_TICKS})")
+                if lead != 0 and self._tick % 60 == 0:
+                    rtt_ms = self._smoothed_rtt * 1000 if self._smoothed_rtt else 0
+                    print(f"[{_ts()}] [client pid={self._client.player_id}] "
+                          f"client_tick={self._tick} server_tick={state.tick} "
+                          f"lead={lead} (target {self._lead_ticks}) rtt={rtt_ms:.1f}ms")
 
     def draw(self) -> None:
         state = self._client.get_state()
@@ -175,6 +203,9 @@ class GameScene:
         if self._prediction:
             self._prediction.apply_input(inp)
 
+        # Record send time for RTT measurement
+        self._send_times[tick] = time.monotonic()
+
         # Send to server
         self._client.queue_input(InputMsg(
             player_id=pid, tick=tick,
@@ -184,5 +215,26 @@ class GameScene:
         if self._debug:
             if mx or my or place:
                 print(f"[{_ts()}] [client pid={pid}] tick={tick} input: mx={mx:+.0f} my={my:+.0f} bomb={place}")
-            elif tick % 20 == 0:
+            elif tick % 60 == 0:
                 print(f"[{_ts()}] [client pid={pid}] tick={tick} input: (neutral)")
+
+    def _update_rtt(self, confirmed_server_tick: int) -> None:
+        """Feed the latest confirmed server tick into the RTT EWMA."""
+        now = time.monotonic()
+        # Find the oldest send_times entry that the server has now confirmed
+        to_remove = [t for t in self._send_times if t <= confirmed_server_tick]
+        if not to_remove:
+            # Purge entries older than 10 seconds to avoid unbounded growth on loss
+            stale = [t for t, ts in self._send_times.items() if now - ts > 10.0]
+            for t in stale:
+                del self._send_times[t]
+            return
+        # Use the most recently confirmed tick for the measurement
+        sample_tick = max(to_remove)
+        rtt = now - self._send_times[sample_tick]
+        for t in to_remove:
+            del self._send_times[t]
+        if self._smoothed_rtt is None:
+            self._smoothed_rtt = rtt
+        else:
+            self._smoothed_rtt = (1.0 - _RTT_ALPHA) * self._smoothed_rtt + _RTT_ALPHA * rtt

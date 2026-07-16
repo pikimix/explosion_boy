@@ -1,9 +1,10 @@
 """Apply player input impulses via the physics space and write results to GameState."""
 from __future__ import annotations
 
+import math
+
 from core.components import PlayerInput, PhysicsState
 from core.state import GameState
-from core.tick import TICK_DT
 from engine.config import MAX_PLAYER_SPEED
 from engine.physics import PhysicsSpace
 
@@ -12,30 +13,33 @@ def process_movement(
     state: GameState,
     space: PhysicsSpace,
     inputs: list[PlayerInput],
+    tick_dt: float,
 ) -> None:
     for inp in inputs:
-        if inp.player_id not in state.players:
+        stats = state.players.get(inp.player_id)
+
+        if stats is None:
             continue
         if not space.has_player(inp.player_id):
             continue
 
         # Reverse controls if the debuff is active
-        stats = state.players.get(inp.player_id)
-        if stats is not None and stats.reversed_controls_ticks > 0:
+        if stats.reversed_controls_ticks > 0:
             mx, my = -inp.move_x, -inp.move_y
         else:
             mx, my = inp.move_x, inp.move_y
         # Normalise diagonal input so speed is consistent
-        mag = (mx * mx + my * my) ** 0.5
+        mag = math.hypot(mx, my)
         if mag > 1.0:
-            mx, my = mx / mag, my / mag
+            inv_mag = 1.0 / mag
+            mx, my = mx * inv_mag, my * inv_mag
 
         speed = MAX_PLAYER_SPEED * (1 + stats.speed_level * 0.3) if stats else MAX_PLAYER_SPEED
         vx = mx * speed
         vy = my * speed
         space.set_player_velocity(inp.player_id, vx, vy)
 
-    space.step(TICK_DT)
+    space.step(tick_dt)
 
     # Write physics results back to GameState
     for pid in list(state.players.keys()):
