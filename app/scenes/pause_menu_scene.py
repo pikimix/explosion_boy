@@ -204,7 +204,6 @@ class PauseMenuScene:
 
     def on_key_release(self, key: int, modifiers: int) -> None:
         """Handle key-release events (no-op; required by the arcade scene interface)."""
-        pass
 
     def on_mouse_press(self, x: float, y: float, button: int, modifiers: int) -> None:
         """Resume the game or start dragging a slider on left click.

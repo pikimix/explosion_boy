@@ -15,15 +15,12 @@ class _FakeTransport:
 
     def send(self, peer_id, data, channel):
         """No-op stub for sending data to a single peer."""
-        pass
 
     def broadcast(self, data, channel):
         """No-op stub for broadcasting data to all peers."""
-        pass
 
     def disconnect(self, peer_id):
         """No-op stub for disconnecting a peer."""
-        pass
 
 
 def _join_n_players(lobby: LobbyManager, n: int) -> None:

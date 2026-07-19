@@ -45,7 +45,7 @@ _SLIDER_SEGMENTS = 24     # gradient segments in brightness slider
 
 
 class LobbyScene:
-    """Waiting-room scene where players join, edit their name/colour, and ready up before a match starts."""
+    """Waiting-room scene where players join, edit their name/colour, and ready up."""
 
     def __init__(self, client: GameClient, player_name: str,
                  scene_manager: 'SceneManager',  # type: ignore[name-defined]
@@ -385,7 +385,7 @@ class LobbyScene:
     # ── Draw ──────────────────────────────────────────────────────────────────
 
     def draw(self) -> None:
-        """Render the map preview, title/waiting text, HUD, colour picker, and connection overlays."""
+        """Render the map preview, title/waiting text, HUD, colour picker, and overlays."""
         with self._camera.activate():
             self._tile_shapes.draw()
             self._spawn_shapes.draw()
@@ -592,7 +592,7 @@ class LobbyScene:
             user_prefs.set_pref('name', stripped)
 
     def on_key_press(self, key: int, modifiers: int) -> None:
-        """Handle name-editing keys, ESCAPE (close picker or open pause menu), and SPACE (toggle ready).
+        """Handle name-editing keys, ESCAPE (close picker/open pause menu), SPACE (toggle ready).
 
         Parameters
         ----------
@@ -623,7 +623,6 @@ class LobbyScene:
 
     def on_key_release(self, key: int, modifiers: int) -> None:
         """Do nothing; required by arcade's key-release event interface."""
-        pass
 
     # ── Spawn markers ─────────────────────────────────────────────────────────
 

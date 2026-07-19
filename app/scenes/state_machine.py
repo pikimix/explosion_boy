@@ -14,19 +14,15 @@ class BaseScene(Protocol):
 
     def update(self, dt: float) -> None:
         """Advance the scene's state by one frame; called every tick while active."""
-        ...
 
     def draw(self) -> None:
         """Render the scene's current state; called every frame after `update`."""
-        ...
 
     def on_key_press(self, key: int, modifiers: int) -> None:
         """Handle a key-down event forwarded from the window."""
-        ...
 
     def on_key_release(self, key: int, modifiers: int) -> None:
         """Handle a key-up event forwarded from the window."""
-        ...
 
 
 class SceneManager:

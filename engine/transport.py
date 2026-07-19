@@ -52,17 +52,14 @@ class ServerTransport(Protocol):
 
     def poll(self, timeout: float = 0) -> list[TransportEvent]:
         """Return all pending events. Blocks up to *timeout* seconds (0 = non-blocking)."""
-        ...
 
     def send(self, peer_id: UUID, data: bytes,
              channel: int = CHANNEL_RELIABLE) -> None:
         """Send data to one peer."""
-        ...
 
     def broadcast(self, data: bytes,
                   channel: int = CHANNEL_RELIABLE) -> None:
         """Send data to every connected peer."""
-        ...
 
     def disconnect(self, peer_id: UUID) -> None:
         """Forcibly disconnect a single peer.
@@ -72,11 +69,9 @@ class ServerTransport(Protocol):
         peer_id : UUID
             Identifier of the peer to disconnect.
         """
-        ...
 
     def close(self) -> None:
         """Shut down the transport and release any underlying resources."""
-        ...
 
 
 @runtime_checkable
@@ -92,11 +87,9 @@ class ClientTransport(Protocol):
         bool
             True if connected, False otherwise.
         """
-        ...
 
     def poll(self, timeout: float = 0) -> list[TransportEvent]:
         """Return all pending events. Blocks up to *timeout* seconds (0 = non-blocking)."""
-        ...
 
     def send(self, data: bytes, channel: int = CHANNEL_RELIABLE) -> None:
         """Send data to the server.
@@ -109,15 +102,12 @@ class ClientTransport(Protocol):
             Channel to send on, `CHANNEL_RELIABLE` or `CHANNEL_UNRELIABLE`
             (default is `CHANNEL_RELIABLE`).
         """
-        ...
 
     def disconnect(self) -> None:
         """Close the connection to the server."""
-        ...
 
     def reconnect(self) -> None:
         """Close any existing connection and initiate a fresh non-blocking connect."""
-        ...
 
 
 # ── Factory ────────────────────────────────────────────────────────────────────
