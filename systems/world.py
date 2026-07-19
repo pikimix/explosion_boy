@@ -24,14 +24,22 @@ def generate_map(
     num_players: int = 4,
     seed: int | None = None,
     spawn_points: list[tuple[int, int]] | None = None,
+    active_spawns: list[tuple[int, int]] | None = None,
 ) -> list[list[TileKind]]:
+    """active_spawns, if given, is the exact list of spawn cells actually used
+    this round (e.g. spawn_points[pid] for each real player_id) and is what
+    gets a safety zone carved around it. Defaults to spawn_points[:num_players]
+    for backward compatibility, but that only matches actual placement when
+    player_ids happen to be contiguous 0..num_players-1 — not guaranteed once
+    a player has left the lobby mid-session and freed up a lower id (see
+    net/lobby.py.build_initial_state, which always passes active_spawns)."""
     spawn_points = spawn_points if spawn_points is not None else SPAWN_POINTS
     rng = random.Random(seed)
     tiles: list[list[TileKind]] = [
         [TileKind.EMPTY] * cols for _ in range(rows)
     ]
 
-    # Border and alternating solid walls
+    # Border and alternating solid walls — always placed unconditionally.
     for row in range(rows):
         for col in range(cols):
             if row == 0 or row == rows - 1 or col == 0 or col == cols - 1:
@@ -41,7 +49,7 @@ def generate_map(
 
     # 2-tile safety zones around each active spawn point
     safe: set[tuple[int, int]] = set()
-    for col, row in spawn_points[:num_players]:
+    for col, row in (active_spawns if active_spawns is not None else spawn_points[:num_players]):
         for dr in range(-2, 3):
             for dc in range(-2, 3):
                 safe.add((col + dc, row + dr))
