@@ -3,13 +3,9 @@ from __future__ import annotations
 
 import math
 import time
-
-import arcade
 from datetime import datetime
 
-
-def _ts() -> str:
-    return datetime.now().strftime('%H:%M:%S.%f')[:-3]
+import arcade
 
 from app.game_view import GameView
 from app.sound_system import SoundSystem
@@ -18,11 +14,14 @@ from core.state import GameState
 from net.client import GameClient
 from net.protocol import GameOverMsg, GameStartMsg, InputMsg
 from engine.config import MIN_LEAD_TICKS, MAX_LEAD_TICKS, DEFAULT_LEAD_TICKS
-from engine import user_prefs
 from systems.prediction import PredictionEngine
 
 # EWMA smoothing factor for RTT — matches TCP's default (slow to react, spike-resistant)
 _RTT_ALPHA = 0.125
+
+
+def _ts() -> str:
+    return datetime.now().strftime('%H:%M:%S.%f')[:-3]
 
 
 class GameScene:
@@ -81,7 +80,7 @@ class GameScene:
                 self._sounds.stop()
                 self._pending_game_over = msg
                 return
-            elif isinstance(msg, GameStartMsg):
+            if isinstance(msg, GameStartMsg):
                 # Reconnected mid-game — reset tick and prediction for spectator role
                 state = self._client.get_state()
                 if state is not None:
@@ -121,8 +120,7 @@ class GameScene:
         # Advance lead tick counter to match target lead; never go backwards
         if state:
             target = state.tick + self._lead_ticks
-            if self._tick < target:
-                self._tick = target
+            self._tick = max(self._tick, target)
 
         self._tick_accum += min(dt, tick_dt)
         while self._tick_accum >= tick_dt:

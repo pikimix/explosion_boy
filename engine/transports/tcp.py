@@ -18,7 +18,6 @@ from uuid import UUID, uuid4
 
 from engine.transport import (
     CHANNEL_RELIABLE,
-    CHANNEL_UNRELIABLE,
     ConnectEvent,
     DisconnectEvent,
     ReceiveEvent,

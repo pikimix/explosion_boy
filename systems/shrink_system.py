@@ -54,8 +54,7 @@ def _close_ring(state: GameState, space: PhysicsSpace, bus: EventBus, ring: int)
 def process_perimeter_shrink(state: GameState, space: PhysicsSpace, bus: EventBus) -> None:
     if not state.shrink_active:
         player_trigger = (
-            len(state.players) <= SHRINK_TRIGGER_PLAYER_COUNT
-            and state.starting_player_count > SHRINK_TRIGGER_PLAYER_COUNT
+            len(state.players) <= SHRINK_TRIGGER_PLAYER_COUNT < state.starting_player_count
         )
         if state.tick >= SHRINK_TRIGGER_TICKS or player_trigger:
             state.shrink_active = True

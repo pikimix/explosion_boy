@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import threading
 from collections import deque
-from typing import Callable
 
 from core.state import GameState
 from net.protocol import (
@@ -33,7 +32,7 @@ from net.protocol import (
     WelcomeMsg,
     decode_any,
 )
-from engine.transport import CHANNEL_RELIABLE, CHANNEL_UNRELIABLE, ClientTransport
+from engine.transport import CHANNEL_RELIABLE, ClientTransport
 
 
 _RECONNECT_DELAYS = [2.0, 4.0, 8.0, 16.0, 30.0]

@@ -5,11 +5,11 @@ from collections import deque
 from datetime import datetime
 
 from core.components import PlayerInput, neutral_input
+from core.tick import TickNumber
 
 
 def _ts() -> str:
     return datetime.now().strftime('%H:%M:%S.%f')[:-3]
-from core.tick import TickNumber
 
 
 class InputBuffer:

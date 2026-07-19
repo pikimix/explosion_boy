@@ -8,9 +8,8 @@ double-serialisation.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
-from core.serialiser import decode_msg, encode_msg, encode_state, decode_state
+from core.serialiser import decode_msg, encode_msg, decode_state
 from core.state import GameState
 
 PROTOCOL_VERSION: int = 1

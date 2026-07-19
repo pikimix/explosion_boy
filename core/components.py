@@ -1,7 +1,7 @@
 """All primitive game dataclasses. No methods, no imports from other game layers."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import IntEnum
 
 

@@ -8,10 +8,6 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-
-def _ts() -> str:
-    return datetime.now().strftime('%H:%M:%S.%f')[:-3]
-
 from core.clock import TickClock
 from core.components import GamePhase, PlayerInput
 from core.serialiser import decode_state, encode_state
@@ -57,6 +53,10 @@ from systems.powerup_system import (
     _LAST_2_SPAWN_INTERVAL,
 )
 from systems.shrink_system import process_perimeter_shrink
+
+
+def _ts() -> str:
+    return datetime.now().strftime('%H:%M:%S.%f')[:-3]
 
 
 class GameServer:
@@ -270,7 +270,7 @@ class GameServer:
         self._state.tick = tick
         process_movement(self._state, self._space, inputs, self._tick_dt)
         sync_grid_positions(self._state)
-        tick_explosions(self._state, self._bus)
+        tick_explosions(self._state)
         apply_new_bombs(self._state, self._space, inputs)
         sync_pushed_bombs(self._state, self._space)
         detonations = process_fuses(self._state)

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections import deque
 
-from core.components import PlayerInput, PhysicsState
+from core.components import PlayerInput
 from core.state import GameState
 from engine.config import MAX_PLAYER_SPEED, TILE_SIZE
 from engine.physics import PhysicsSpace

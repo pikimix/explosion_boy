@@ -167,10 +167,10 @@ def draw(state: GameState) -> None:
             slot_text.draw()
         y -= _SLOT_H + _PLAYER_GAP
 
-    _draw_legend(win)
+    _draw_legend()
 
 
-def _draw_legend(win: arcade.Window) -> None:
+def _draw_legend() -> None:
     global _legend_header
     bottom_margin = 8.0
     total_h = _LEGEND_H + len(_LEGEND_ENTRIES) * _LEGEND_H

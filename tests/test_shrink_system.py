@@ -95,8 +95,8 @@ def test_ring_closes_kills_occupant_and_removes_bomb_after_warning_expires():
     # and make this test's assertions about the *deliberately placed* victim
     # and bomb ambiguous.
     centre = (state.map_cols // 2, state.map_rows // 2)
-    for pid in state.player_physics:
-        state.player_physics[pid].x, state.player_physics[pid].y = _grid_centre(*centre)
+    for phys in state.player_physics.values():
+        phys.x, phys.y = _grid_centre(*centre)
 
     victim_col, victim_row = 1, 1
     state.player_physics[0].x, state.player_physics[0].y = _grid_centre(victim_col, victim_row)

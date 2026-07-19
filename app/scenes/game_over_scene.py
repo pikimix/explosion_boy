@@ -78,7 +78,6 @@ class GameOverScene:
         )
 
     def _on_quit(self, _event) -> None:
-        import arcade
         arcade.exit()
 
     def update(self, dt: float) -> None:

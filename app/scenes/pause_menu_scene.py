@@ -76,8 +76,8 @@ class PauseMenuScene:
         if self._title_text is not None:
             return
 
-        cx, cy = win.width / 2, win.height / 2
-        pl, pb, pr, pt = self._panel_bounds(win)
+        cx = win.width / 2
+        pl, pb, _, pt = self._panel_bounds(win)
         sl = self._slider_left(win)
         label_x = pl + 18
 
@@ -121,8 +121,7 @@ class PauseMenuScene:
 
         win = arcade.get_window()
         self._ensure_texts(win)
-        cx, cy = win.width / 2, win.height / 2
-        pl, pb, pr, pt = self._panel_bounds(win)
+        pl, pb, _, _ = self._panel_bounds(win)
 
         # Full-screen dim
         arcade.draw_rect_filled(arcade.LBWH(0, 0, win.width, win.height), _OVERLAY_COLOUR)
@@ -212,7 +211,7 @@ class PauseMenuScene:
         value = round(self._value_from_x(x, sl), 2)
         if idx == 0:
             self._sounds.music_volume = value
-            user_prefs.set('music_volume', value)
+            user_prefs.set_pref('music_volume', value)
         else:
             self._sounds.sfx_volume = value
-            user_prefs.set('sfx_volume', value)
+            user_prefs.set_pref('sfx_volume', value)

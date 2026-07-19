@@ -51,5 +51,5 @@ def get(key: str):
     return _prefs.get(key, _DEFAULTS.get(key))
 
 
-def set(key: str, value) -> None:  # noqa: A001
+def set_pref(key: str, value) -> None:
     _prefs[key] = value

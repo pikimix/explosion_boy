@@ -16,7 +16,6 @@ _hint_label: arcade.Text | None = None
 def draw(volume: float) -> None:
     global _volume_label, _hint_label
     bar_left = _PADDING
-    bar_right = bar_left + _BAR_W
     bar_cx = bar_left + _BAR_W / 2
     bar_y = _PADDING + _BAR_H / 2
 

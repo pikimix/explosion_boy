@@ -12,7 +12,6 @@ from PIL import Image
 
 from app.sound_system import SoundSystem
 from app.ui.hud import HUD_WIDTH
-from core.components import TileKind
 from net.client import GameClient
 from net.protocol import GameStartMsg, LobbyUpdateMsg
 from engine import user_prefs
@@ -254,7 +253,7 @@ class LobbyScene:
             self._saturation = min(dist / (_WHEEL_SIZE / 2), 1.0)
             self._update_colour_from_hsv()
             self._client.send_colour(self._colour_rgb)
-            user_prefs.set('colour_rgb', list(self._colour_rgb))
+            user_prefs.set_pref('colour_rgb', list(self._colour_rgb))
             return True
 
         # Slider → update brightness
@@ -263,7 +262,7 @@ class LobbyScene:
             self._value = max(0.0, min(1.0, (x - sl) / (sr - sl)))
             self._update_colour_from_hsv()
             self._client.send_colour(self._colour_rgb)
-            user_prefs.set('colour_rgb', list(self._colour_rgb))
+            user_prefs.set_pref('colour_rgb', list(self._colour_rgb))
             return True
 
         return False
@@ -535,7 +534,7 @@ class LobbyScene:
         if stripped and stripped != self._player_name:
             self._player_name = stripped
             self._client.send_rename(stripped)
-            user_prefs.set('name', stripped)
+            user_prefs.set_pref('name', stripped)
 
     def on_key_press(self, key: int, modifiers: int) -> None:
         if self._editing_name:

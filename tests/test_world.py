@@ -129,4 +129,4 @@ def test_ring_cells_ring_two_on_7x7():
 
 
 def test_ring_cells_beyond_grid_is_empty():
-    assert list(ring_cells(7, 7, 4)) == []
+    assert not list(ring_cells(7, 7, 4))

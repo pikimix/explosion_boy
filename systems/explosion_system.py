@@ -203,7 +203,6 @@ def _spawn_cluster_sub_bombs(
 ) -> None:
     """Spawn up to 4 sub-bombs from each cluster origin; sub-bombs don't count toward cap."""
     from core.components import BombComponent
-    from engine.config import TILE_SIZE
     from systems.powerup_system import CLUSTER_SUB_FUSE_TICKS
 
     for col, row, blast_radius, blast_penetration in origins:
@@ -234,7 +233,7 @@ def _spawn_cluster_sub_bombs(
                 break
 
 
-def tick_explosions(state: GameState, bus: EventBus) -> None:
+def tick_explosions(state: GameState) -> None:
     """Age all active explosions. Player kills are handled by process_detonations."""
     state.explosions = [
         e for e in state.explosions
