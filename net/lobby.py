@@ -89,7 +89,16 @@ class LobbyManager:
         n = len(self._players)
         cols, rows = map_size_for_player_count(n)
         spawn_points = spawn_points_for_grid(cols, rows)
-        tiles = generate_map(cols=cols, rows=rows, num_players=n, seed=seed, spawn_points=spawn_points)
+        # Player ids aren't guaranteed to be a contiguous 0..n-1 range (a player
+        # can leave mid-lobby and free up a lower id without every higher id
+        # being reassigned), so the safety zone must be carved around the exact
+        # spawn cells real players will use — not just spawn_points[:n] — or a
+        # player at a higher id could spawn with no safe zone around them.
+        active_spawns = [spawn_points[lp.player_id] for lp in self._players.values()]
+        tiles = generate_map(
+            cols=cols, rows=rows, num_players=n, seed=seed,
+            spawn_points=spawn_points, active_spawns=active_spawns,
+        )
         state = GameState(
             tick=0,
             map_cols=len(tiles[0]),
