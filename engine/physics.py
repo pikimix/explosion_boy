@@ -68,11 +68,14 @@ class PhysicsSpace:
         if self._tiles:
             self._tiles[row][col] = _PASSABLE_TILE
 
-    def add_wall(self, col: int, row: int) -> None:
+    def add_wall(self, col: int, row: int, kind: int = 2) -> None:
+        # kind defaults to 2 (TileKind.SOFT_BLOCK) to preserve existing callers
+        # (e.g. rubble-bomb scatter); pass TileKind.SOLID_WALL explicitly for
+        # indestructible walls such as the perimeter shrink.
         if (col, row) not in self._static_shapes:
             self._static_shapes[(col, row)] = self._make_wall_shape(col, row)
         if self._tiles:
-            self._tiles[row][col] = 2  # TileKind.SOFT_BLOCK — non-zero for _correct_player_positions
+            self._tiles[row][col] = kind
 
     # ── Players ───────────────────────────────────────────────────────────────
 

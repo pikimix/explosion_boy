@@ -56,6 +56,7 @@ from systems.powerup_system import (
     tick_status_effects,
     _LAST_2_SPAWN_INTERVAL,
 )
+from systems.shrink_system import process_perimeter_shrink
 
 
 class GameServer:
@@ -278,6 +279,7 @@ class GameServer:
             return
         process_powerup_pickups(self._state)
         tick_status_effects(self._state)
+        process_perimeter_shrink(self._state, self._space, self._bus)
         self._maybe_spawn_last_2_powerup(tick)
         self._check_win_condition()
 

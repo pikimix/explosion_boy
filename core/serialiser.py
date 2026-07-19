@@ -70,6 +70,13 @@ def encode_state(gs: GameState) -> bytes:
         "wi": gs.winner_id,
         "pn": {str(k): v for k, v in gs.player_names.items()},
         "pc": {str(k): list(v) for k, v in gs.player_colours.items()},
+        "spc": gs.starting_player_count,
+        "sa": gs.shrink_active,
+        "sr": gs.shrink_ring,
+        "swr": gs.shrink_warn_ring,
+        "swt": gs.shrink_warn_ticks_remaining,
+        "snw": gs.shrink_next_warn_tick,
+        "ss": gs.shrink_stopped,
     }
     return msgpack.packb(d, use_bin_type=True)
 
@@ -97,6 +104,13 @@ def decode_state(data: bytes) -> GameState:
         player_colours={int(k): tuple(v) for k, v in d.get("pc", {}).items()},
         phase=GamePhase(d["ph"]),
         winner_id=d["wi"],
+        starting_player_count=d.get("spc", 0),
+        shrink_active=d.get("sa", False),
+        shrink_ring=d.get("sr", 0),
+        shrink_warn_ring=d.get("swr", 0),
+        shrink_warn_ticks_remaining=d.get("swt", 0),
+        shrink_next_warn_tick=d.get("snw", 0),
+        shrink_stopped=d.get("ss", False),
     )
 
 

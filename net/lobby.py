@@ -12,9 +12,14 @@ from net.protocol import (
     LobbyUpdateMsg,
     WelcomeMsg,
 )
-from engine.config import MAX_PLAYERS, PLAYER_COLOURS, SPAWN_POINTS
+from engine.config import MAX_PLAYERS, PLAYER_COLOURS
 from engine.transport import CHANNEL_RELIABLE, ServerTransport
-from systems.world import generate_map, spawn_position_px
+from systems.world import (
+    generate_map,
+    map_size_for_player_count,
+    spawn_points_for_grid,
+    spawn_position_px,
+)
 
 
 @dataclass
@@ -82,17 +87,20 @@ class LobbyManager:
 
     def build_initial_state(self, seed: int | None = None) -> GameState:
         n = len(self._players)
-        tiles = generate_map(num_players=n, seed=seed)
+        cols, rows = map_size_for_player_count(n)
+        spawn_points = spawn_points_for_grid(cols, rows)
+        tiles = generate_map(cols=cols, rows=rows, num_players=n, seed=seed, spawn_points=spawn_points)
         state = GameState(
             tick=0,
             map_cols=len(tiles[0]),
             map_rows=len(tiles),
             tiles=tiles,
             phase=GamePhase.PLAYING,
+            starting_player_count=n,
         )
         for lp in self._players.values():
             state.players[lp.player_id] = PlayerStats(player_id=lp.player_id)
-            px, py = spawn_position_px(lp.player_id)
+            px, py = spawn_position_px(lp.player_id, spawn_points)
             state.player_physics[lp.player_id] = PhysicsState(px, py)
             state.player_names[lp.player_id] = lp.name
             state.player_colours[lp.player_id] = lp.colour_rgb

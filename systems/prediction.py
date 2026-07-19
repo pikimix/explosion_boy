@@ -125,8 +125,8 @@ class PredictionEngine:
                         if kind != self._confirmed_tiles[r][c]:
                             if int(kind) == 0:  # TileKind.EMPTY — wall removed
                                 self._space.remove_wall(c, r)
-                            else:  # TileKind.SOFT_BLOCK added by rubble bomb
-                                self._space.add_wall(c, r)
+                            else:  # wall added (rubble bomb, or a shrink ring)
+                                self._space.add_wall(c, r, kind=int(kind))
             else:
                 self._space.rebuild_static_walls(state.tiles)
             self._confirmed_tiles = state.tiles

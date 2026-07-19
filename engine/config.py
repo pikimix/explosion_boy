@@ -1,5 +1,5 @@
 TILE_SIZE = 48          # pixels per tile
-GRID_COLS = 29
+GRID_COLS = 25          # fallback default only — real rounds size the grid via map_size_for_player_count
 GRID_ROWS = 25
 WINDOW_W = 1200         # fixed screen resolution, independent of map size
 WINDOW_H = 900
@@ -21,6 +21,19 @@ BOMB_FUSE_TICKS = round(BOMB_FUSE_SECONDS * TICK_RATE)        # 180 at 60 tps
 DEFAULT_BLAST_RADIUS = 2
 EXPLOSION_DURATION_TICKS = round(EXPLOSION_DURATION_SECONDS * TICK_RATE)  # 30 at 60 tps
 SOFT_BLOCK_DROP_CHANCE = 0.25
+
+# ── Perimeter shrink ───────────────────────────────────────────────────────────
+SHRINK_TRIGGER_SECONDS = 300.0                                    # 5 minutes
+SHRINK_INTERVAL_SECONDS = 30.0                                    # time between ring closures
+SHRINK_TRIGGER_TICKS = round(SHRINK_TRIGGER_SECONDS * TICK_RATE)  # 18000 at 60 tps
+SHRINK_INTERVAL_TICKS = round(SHRINK_INTERVAL_SECONDS * TICK_RATE)  # 1800 at 60 tps
+SHRINK_WARN_TICKS = BOMB_FUSE_TICKS       # rings flash for the same duration as a bomb fuse
+SHRINK_TRIGGER_PLAYER_COUNT = 2           # trigger once alive count drops to/below this
+SHRINK_MIN_INTERIOR_AXIS = 7              # stop permanently once a ring would leave less than this on either axis
+
+# ── Player-count-scaled starting grid ─────────────────────────────────────────
+MIN_GRID_SIZE = 7    # square grid side at 2 players (both endpoints kept odd for border/pillar symmetry)
+MAX_GRID_SIZE = 25   # square grid side at MAX_PLAYERS
 
 MAX_PLAYER_SPEED = 180.0        # pixels per second
 PLAYER_RADIUS = TILE_SIZE * 0.38

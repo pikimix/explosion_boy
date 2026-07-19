@@ -56,6 +56,8 @@ class GameScene:
         pid = client.player_id
         state = start_state if start_state is not None else client.get_state()
         current = client.get_state()
+        if state is not None:
+            self._view.set_map_size(state.map_cols, state.map_rows)
         base_tick = current.tick if current else (state.tick if state else 0)
         self._tick = base_tick + DEFAULT_LEAD_TICKS
         if pid is not None:
@@ -82,6 +84,8 @@ class GameScene:
             elif isinstance(msg, GameStartMsg):
                 # Reconnected mid-game — reset tick and prediction for spectator role
                 state = self._client.get_state()
+                if state is not None:
+                    self._view.set_map_size(state.map_cols, state.map_rows)
                 tick_rate = self._client.tick_rate
                 self._tick = (state.tick if state else 0) + DEFAULT_LEAD_TICKS
                 self._send_times.clear()

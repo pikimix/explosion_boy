@@ -16,10 +16,8 @@ from core.components import TileKind
 from net.client import GameClient
 from net.protocol import GameStartMsg, LobbyUpdateMsg
 from engine import user_prefs
-from engine.config import (
-    GRID_COLS, GRID_ROWS, PLAYER_COLOURS, SPAWN_POINTS,
-    TILE_SIZE, WINDOW_H, WINDOW_W,
-)
+from engine.config import PLAYER_COLOURS, TILE_SIZE, WINDOW_H, WINDOW_W
+from systems.world import map_size_for_player_count, spawn_points_for_grid
 
 _LOBBY_MUSIC_PATH = Path(__file__).parent.parent.parent / 'resources' / 'music' / 'in_the_lobby.wav'
 
@@ -77,10 +75,11 @@ class LobbyScene:
         self._picker_open = False
         self._wheel_texture: arcade.Texture | None = None
 
-        self._tile_shapes = self._build_preview_tiles()
-        self._map_w = GRID_COLS * TILE_SIZE
-        self._map_h = GRID_ROWS * TILE_SIZE
+        self._spawn_points: list[tuple[int, int]] = []
+        self._map_w = WINDOW_W
+        self._map_h = WINDOW_H
         self._camera = self._make_camera(WINDOW_W, WINDOW_H)
+        self._rebuild_preview(len(self._players))
 
         play_cx = HUD_WIDTH + (WINDOW_W - HUD_WIDTH) / 2
         self._title_text = arcade.Text(
@@ -281,13 +280,13 @@ class LobbyScene:
 
     # ── Map preview ───────────────────────────────────────────────────────────
 
-    def _build_preview_tiles(self) -> arcade.shape_list.ShapeElementList:
+    def _build_preview_tiles(self, cols: int, rows: int) -> arcade.shape_list.ShapeElementList:
         shape_list = arcade.shape_list.ShapeElementList()
-        for row in range(GRID_ROWS):
-            for col in range(GRID_COLS):
+        for row in range(rows):
+            for col in range(cols):
                 is_wall = (
-                    row == 0 or row == GRID_ROWS - 1
-                    or col == 0 or col == GRID_COLS - 1
+                    row == 0 or row == rows - 1
+                    or col == 0 or col == cols - 1
                     or (row % 2 == 0 and col % 2 == 0)
                 )
                 colour = _SOLID_COLOUR if is_wall else _EMPTY_COLOUR
@@ -300,6 +299,17 @@ class LobbyScene:
                 )
         return shape_list
 
+    def _rebuild_preview(self, n: int) -> None:
+        """Recompute preview size/tiles/spawns/camera to match the grid a round
+        would use with n players (engine/config's MIN_GRID_SIZE..MAX_GRID_SIZE)."""
+        cols, rows = map_size_for_player_count(n)
+        self._map_w = cols * TILE_SIZE
+        self._map_h = rows * TILE_SIZE
+        self._spawn_points = spawn_points_for_grid(cols, rows)
+        self._tile_shapes = self._build_preview_tiles(cols, rows)
+        win = arcade.get_window()
+        self._camera = self._make_camera(win.width, win.height)
+
     # ── Network ───────────────────────────────────────────────────────────────
 
     def update(self, dt: float) -> None:
@@ -309,6 +319,7 @@ class LobbyScene:
         for msg in self._client.poll_messages():
             if isinstance(msg, LobbyUpdateMsg):
                 self._players = msg.players
+                self._rebuild_preview(len(self._players))
                 if self._client.player_id is not None and not self._colour_initialised:
                     pid = self._client.player_id
                     initial = PLAYER_COLOURS[pid % len(PLAYER_COLOURS)]
@@ -557,7 +568,7 @@ class LobbyScene:
         texts = []
         for p in self._players:
             pid = p['id']
-            col, row = SPAWN_POINTS[pid]
+            col, row = self._spawn_points[pid]
             px = col * TILE_SIZE + TILE_SIZE / 2
             py = row * TILE_SIZE + TILE_SIZE / 2
             colour_rgb = tuple(p.get('colour_rgb', PLAYER_COLOURS[pid % len(PLAYER_COLOURS)][:3]))
