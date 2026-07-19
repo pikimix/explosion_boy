@@ -1,9 +1,12 @@
+"""Tests for the world/map-generation helpers in systems/world.py."""
+
 from core.components import TileKind
 from engine.config import MAX_GRID_SIZE, MAX_PLAYERS, MIN_GRID_SIZE
 from systems.world import generate_map, map_size_for_player_count, ring_cells, spawn_points_for_grid
 
 
 def test_map_size_is_square_odd_and_bounded():
+    """Map sizes for every valid player count are square, odd, and within grid bounds."""
     for n in range(2, MAX_PLAYERS + 1):
         cols, rows = map_size_for_player_count(n)
         assert cols == rows
@@ -12,21 +15,25 @@ def test_map_size_is_square_odd_and_bounded():
 
 
 def test_map_size_is_non_decreasing_with_player_count():
+    """Map size never shrinks as the player count increases."""
     sizes = [map_size_for_player_count(n)[0] for n in range(2, MAX_PLAYERS + 1)]
     assert sizes == sorted(sizes)
 
 
 def test_map_size_endpoints():
+    """Map size matches the min grid at the lowest and max grid at the highest player count."""
     assert map_size_for_player_count(2) == (MIN_GRID_SIZE, MIN_GRID_SIZE)
     assert map_size_for_player_count(MAX_PLAYERS) == (MAX_GRID_SIZE, MAX_GRID_SIZE)
 
 
 def test_map_size_clamps_out_of_range_player_counts():
+    """Out-of-range player counts are clamped to the nearest valid endpoint."""
     assert map_size_for_player_count(0) == map_size_for_player_count(2)
     assert map_size_for_player_count(999) == map_size_for_player_count(MAX_PLAYERS)
 
 
 def test_spawn_points_stay_in_bounds_and_off_pillars():
+    """Generated spawn points stay within the playable grid and never land on a pillar cell."""
     for n in (2, 8, 16):
         cols, rows = map_size_for_player_count(n)
         points = spawn_points_for_grid(cols, rows)
@@ -38,6 +45,7 @@ def test_spawn_points_stay_in_bounds_and_off_pillars():
 
 
 def test_spawn_points_are_unique_for_active_players():
+    """Spawn points assigned to active players contain no duplicates."""
     for n in (2, 8, 16):
         cols, rows = map_size_for_player_count(n)
         points = spawn_points_for_grid(cols, rows)[:n]
@@ -45,6 +53,7 @@ def test_spawn_points_are_unique_for_active_players():
 
 
 def test_generate_map_matches_requested_dimensions():
+    """Generated map tiles have the requested number of rows and columns."""
     for n in (2, 16):
         cols, rows = map_size_for_player_count(n)
         spawn_points = spawn_points_for_grid(cols, rows)
@@ -56,6 +65,7 @@ def test_generate_map_matches_requested_dimensions():
 
 
 def test_generate_map_border_is_solid():
+    """The outer border of a generated map is entirely solid wall tiles."""
     cols, rows = 15, 13
     spawn_points = spawn_points_for_grid(cols, rows)
     tiles = generate_map(cols=cols, rows=rows, num_players=4, seed=1, spawn_points=spawn_points)
@@ -66,6 +76,7 @@ def test_generate_map_border_is_solid():
 
 
 def test_generate_map_places_pillars_unconditionally_even_near_spawns():
+    """Pillar cells are always solid walls, even when they fall inside a spawn's safety zone."""
     # Pillars are a fixed structural feature of the map and are always placed,
     # regardless of spawn safety zones — only soft (breakable) blocks are kept
     # out of a spawn's safety zone.
@@ -111,6 +122,7 @@ def test_soft_blocks_respect_safety_zone_for_the_exact_active_spawns():
 
 
 def test_ring_cells_ring_one_on_7x7():
+    """The first ring on a 7x7 grid matches the expected border-adjacent cells."""
     cols, rows = 7, 7
     ring1 = set(ring_cells(cols, rows, 1))
     expected = (
@@ -123,10 +135,12 @@ def test_ring_cells_ring_one_on_7x7():
 
 
 def test_ring_cells_ring_two_on_7x7():
+    """The second ring on a 7x7 grid matches the expected set of cells."""
     ring2 = set(ring_cells(7, 7, 2))
     expected = {(2, 2), (3, 2), (4, 2), (2, 4), (3, 4), (4, 4), (2, 3), (4, 3)}
     assert ring2 == expected
 
 
 def test_ring_cells_beyond_grid_is_empty():
+    """Ring cells beyond the grid bounds return an empty sequence."""
     assert not list(ring_cells(7, 7, 4))

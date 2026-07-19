@@ -50,6 +50,19 @@ def _enc_powerup(p: PowerupComponent) -> list:
 
 
 def encode_state(gs: GameState) -> bytes:
+    """Pack a ``GameState`` into msgpack bytes for network transmission.
+
+    Parameters
+    ----------
+    gs : GameState
+        The game state to serialise. Its tile cache/version is refreshed
+        in place if the tile grid has changed since the last encode.
+
+    Returns
+    -------
+    bytes
+        The msgpack-encoded representation of the state.
+    """
     if gs.tiles_dirty or gs.tile_list_cache is None:
         gs.tiles_version += 1
         gs.tile_list_cache = [[int(c) for c in row] for row in gs.tiles]
@@ -84,6 +97,18 @@ def encode_state(gs: GameState) -> bytes:
 # ── Decode ─────────────────────────────────────────────────────────────────────
 
 def decode_state(data: bytes) -> GameState:
+    """Unpack msgpack bytes back into a ``GameState``.
+
+    Parameters
+    ----------
+    data : bytes
+        The msgpack-encoded state, as produced by :func:`encode_state`.
+
+    Returns
+    -------
+    GameState
+        The reconstructed game state.
+    """
     d = msgpack.unpackb(data, raw=False)
     return GameState(
         tick=d["t"],
@@ -117,8 +142,32 @@ def decode_state(data: bytes) -> GameState:
 # ── Generic message encode/decode (for net/protocol.py messages) ───────────────
 
 def encode_msg(obj: dict[str, Any]) -> bytes:
+    """Pack a plain dict (e.g. a net/protocol.py message) into msgpack bytes.
+
+    Parameters
+    ----------
+    obj : dict of str to Any
+        The message payload to serialise.
+
+    Returns
+    -------
+    bytes
+        The msgpack-encoded representation of ``obj``.
+    """
     return msgpack.packb(obj, use_bin_type=True)
 
 
 def decode_msg(data: bytes) -> dict[str, Any]:
+    """Unpack msgpack bytes back into a plain dict.
+
+    Parameters
+    ----------
+    data : bytes
+        The msgpack-encoded message, as produced by :func:`encode_msg`.
+
+    Returns
+    -------
+    dict of str to Any
+        The reconstructed message payload.
+    """
     return msgpack.unpackb(data, raw=False)

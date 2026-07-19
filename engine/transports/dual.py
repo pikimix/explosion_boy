@@ -56,9 +56,19 @@ class _RecvBuffer:
         self._buf = bytearray()
 
     def feed(self, chunk: bytes) -> None:
+        """Append a raw chunk of bytes received from the socket to the buffer."""
         self._buf.extend(chunk)
 
     def messages(self) -> list[tuple[int, bytes]]:
+        """Extract and return all complete framed messages currently buffered.
+
+        Returns
+        -------
+        list[tuple[int, bytes]]
+            One ``(channel, payload)`` pair per complete frame found in the
+            buffer, in arrival order. Any trailing partial frame is left
+            in the buffer for the next call.
+        """
         out: list[tuple[int, bytes]] = []
         while len(self._buf) >= _TCP_HEADER.size:
             length, channel = _TCP_HEADER.unpack_from(self._buf)
@@ -80,6 +90,15 @@ class _TcpPeer:
         self.udp_addr: tuple[str, int] | None = None
 
     def queue_send(self, data: bytes, channel: int) -> None:
+        """Encode a payload as a TCP frame and enqueue it for sending.
+
+        Parameters
+        ----------
+        data : bytes
+            Payload to send.
+        channel : int
+            Logical channel (e.g. ``CHANNEL_RELIABLE``) to tag the frame with.
+        """
         self._send_queue.append(_tcp_encode(data, channel))
 
     def flush(self) -> bool:
@@ -114,6 +133,7 @@ class _TcpPeer:
         return self.recv_buf.messages()
 
     def close(self) -> None:
+        """Close the underlying TCP socket, ignoring any error."""
         try:
             self.sock.close()
         except OSError:
@@ -151,6 +171,23 @@ class DualServerTransport:
         self._select_list: list[socket.socket] = [self._tcp_listen, self._udp_sock]
 
     def poll(self, timeout: float = 0) -> list[TransportEvent]:
+        """Service the TCP listen socket, UDP socket and all TCP peers once.
+
+        Accepts new TCP connections, receives pending TCP/UDP data, flushes
+        queued outbound TCP data, and drops any peer whose TCP connection
+        has died.
+
+        Parameters
+        ----------
+        timeout : float, optional
+            Maximum time in seconds to block in ``select`` waiting for
+            readable sockets (default 0, i.e. non-blocking).
+
+        Returns
+        -------
+        list[TransportEvent]
+            Connect, receive and disconnect events produced during this poll.
+        """
         events: list[TransportEvent] = []
 
         readable, _, _ = select.select(self._select_list, [], [], timeout)
@@ -174,6 +211,19 @@ class DualServerTransport:
 
     def send(self, peer_id: UUID, data: bytes,
              channel: int = CHANNEL_RELIABLE) -> None:
+        """Send a payload to a single connected peer.
+
+        Parameters
+        ----------
+        peer_id : UUID
+            Identifier of the target peer. Silently ignored if unknown.
+        data : bytes
+            Payload to send.
+        channel : int, optional
+            ``CHANNEL_RELIABLE`` routes over TCP; ``CHANNEL_UNRELIABLE``
+            routes over UDP if the peer's UDP endpoint is registered,
+            otherwise falls back to TCP (default ``CHANNEL_RELIABLE``).
+        """
         peer = self._peers.get(peer_id)
         if peer is None:
             return
@@ -187,6 +237,17 @@ class DualServerTransport:
 
     def broadcast(self, data: bytes,
                   channel: int = CHANNEL_RELIABLE) -> None:
+        """Send a payload to every currently connected peer.
+
+        Parameters
+        ----------
+        data : bytes
+            Payload to send.
+        channel : int, optional
+            ``CHANNEL_RELIABLE`` routes over TCP; ``CHANNEL_UNRELIABLE``
+            routes over UDP for peers with a registered UDP endpoint,
+            otherwise falls back to TCP (default ``CHANNEL_RELIABLE``).
+        """
         for peer_id, peer in self._peers.items():
             if channel == CHANNEL_UNRELIABLE and peer.udp_addr is not None:
                 try:
@@ -197,10 +258,18 @@ class DualServerTransport:
                 peer._send_queue.append(_tcp_encode(data, channel))
 
     def disconnect(self, peer_id: UUID) -> None:
+        """Forcibly drop a connected peer.
+
+        Parameters
+        ----------
+        peer_id : UUID
+            Identifier of the peer to disconnect. No-op if unknown.
+        """
         if peer_id in self._peers:
             self._drop(peer_id, [])
 
     def close(self) -> None:
+        """Close all peer connections and the TCP/UDP listen sockets."""
         for peer in list(self._peers.values()):
             peer.close()
         self._peers.clear()
@@ -319,9 +388,27 @@ class DualClientTransport:
 
     @property
     def connected(self) -> bool:
+        """Return whether the client currently has an established connection."""
         return self._connected
 
     def poll(self, timeout: float = 0) -> list[TransportEvent]:
+        """Advance the connection state machine and process socket I/O once.
+
+        While connecting, checks for TCP connect completion. Once connected,
+        flushes queued outbound TCP data, reads pending TCP/UDP data, and
+        detects disconnection.
+
+        Parameters
+        ----------
+        timeout : float, optional
+            Maximum time in seconds to block in ``select`` waiting for
+            socket readiness (default 0, i.e. non-blocking).
+
+        Returns
+        -------
+        list[TransportEvent]
+            Connect, receive and disconnect events produced during this poll.
+        """
         events: list[TransportEvent] = []
 
         if self._connecting:
@@ -379,6 +466,17 @@ class DualClientTransport:
         return events
 
     def send(self, data: bytes, channel: int = CHANNEL_RELIABLE) -> None:
+        """Send a payload to the server.
+
+        Parameters
+        ----------
+        data : bytes
+            Payload to send.
+        channel : int, optional
+            ``CHANNEL_RELIABLE`` routes over TCP; ``CHANNEL_UNRELIABLE``
+            routes over UDP once the server has assigned a peer UUID,
+            otherwise falls back to TCP (default ``CHANNEL_RELIABLE``).
+        """
         if not self._connected:
             return
         if channel == CHANNEL_UNRELIABLE and self._peer_uuid is not None:
@@ -392,6 +490,7 @@ class DualClientTransport:
             self._tcp_send_queue.append(_tcp_encode(data, channel))
 
     def disconnect(self) -> None:
+        """Close the TCP and UDP sockets and mark the client as disconnected."""
         self._connected = False
         self._connecting = False
         try:
@@ -404,6 +503,7 @@ class DualClientTransport:
             pass
 
     def reconnect(self) -> None:
+        """Close existing sockets and start a fresh connection attempt to the same host/port."""
         try:
             self._tcp_sock.close()
         except OSError:

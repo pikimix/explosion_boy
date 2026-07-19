@@ -48,8 +48,29 @@ def save() -> None:
 
 
 def get(key: str):
+    """Return the current value of a preference, falling back to its default.
+
+    Parameters
+    ----------
+    key : str
+        Name of the preference to look up.
+
+    Returns
+    -------
+    Any
+        The stored value for ``key``, or its default if unset.
+    """
     return _prefs.get(key, _DEFAULTS.get(key))
 
 
 def set_pref(key: str, value) -> None:
+    """Set a preference value in the in-memory cache.
+
+    Parameters
+    ----------
+    key : str
+        Name of the preference to set.
+    value : Any
+        New value to store for ``key``.
+    """
     _prefs[key] = value

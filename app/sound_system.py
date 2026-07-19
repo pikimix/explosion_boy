@@ -36,20 +36,24 @@ _sfx_volume: float = 1.0
 
 
 def set_music_volume(value: float) -> None:
+    """Set the global music volume, clamped to the 0.0-1.0 range."""
     global _music_volume
     _music_volume = max(0.0, min(1.0, value))
 
 
 def get_music_volume() -> float:
+    """Return the current global music volume."""
     return _music_volume
 
 
 def set_sfx_volume(value: float) -> None:
+    """Set the global sound-effect volume, clamped to the 0.0-1.0 range."""
     global _sfx_volume
     _sfx_volume = max(0.0, min(1.0, value))
 
 
 def get_sfx_volume() -> float:
+    """Return the current global sound-effect volume."""
     return _sfx_volume
 
 
@@ -61,21 +65,25 @@ class MusicPlayer:
         self._player: pyglet.media.Player | None = None
 
     def play(self) -> None:
+        """Start looping playback of the track at the current music volume."""
         self._player = arcade.play_sound(
             self._sound, volume=_music_volume * _MUSIC_GAIN, loop=True,
         )
 
     def sync_volume(self) -> None:
+        """Re-apply the current global music volume to the active player."""
         if self._player:
             self._player.volume = _music_volume * _MUSIC_GAIN
 
     def stop(self) -> None:
+        """Stop playback and release the underlying player."""
         if self._player:
             arcade.stop_sound(self._player)
             self._player = None
 
     @property
     def pitch(self) -> float:
+        """Return the current playback pitch, or 1.0 if nothing is playing."""
         return self._player.pitch if self._player else 1.0  # type: ignore[return-value]
 
     @pitch.setter
@@ -85,6 +93,8 @@ class MusicPlayer:
 
 
 class SoundSystem:
+    """Play sound effects and background music in response to game state changes."""
+
     def __init__(self, local_player_id: int | None,
                  music_volume: float = 1.0, sfx_volume: float = 1.0,
                  music_path: str | Path = _MUSIC_PATH) -> None:
@@ -100,23 +110,28 @@ class SoundSystem:
 
     @property
     def music_volume(self) -> float:
+        """Return the current global music volume."""
         return get_music_volume()
 
     @music_volume.setter
     def music_volume(self, value: float) -> None:
+        """Set the global music volume and re-sync it to the active player."""
         set_music_volume(value)
         self._music.sync_volume()
 
     @property
     def sfx_volume(self) -> float:
+        """Return the current global sound-effect volume."""
         return get_sfx_volume()
 
     @sfx_volume.setter
     def sfx_volume(self, value: float) -> None:
+        """Set the global sound-effect volume."""
         set_sfx_volume(value)
 
     @property
     def pitch(self) -> float:
+        """Return the current music playback pitch."""
         return self._music.pitch
 
     def step_pitch(self) -> float:
@@ -126,9 +141,24 @@ class SoundSystem:
         return self._debug_pitch
 
     def stop(self) -> None:
+        """Stop the background music."""
         self._music.stop()
 
     def update(self, prev: GameState | None, curr: GameState) -> None:
+        """Play sound effects for state changes and update the music tempo.
+
+        Compares the previous and current game state to trigger explosion,
+        death and pickup sound effects, then adjusts the music pitch based
+        on how tense the current state is.
+
+        Parameters
+        ----------
+        prev : GameState or None
+            The game state from the previous update, or None if this is
+            the first update.
+        curr : GameState
+            The current game state.
+        """
         self._check_explosions(prev, curr)
         self._check_deaths(prev, curr)
         self._check_pickups(prev, curr)

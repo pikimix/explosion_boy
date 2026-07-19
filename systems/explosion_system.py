@@ -31,6 +31,27 @@ def process_detonations(
     detonations: list[DetonationEvent],
     bus: EventBus,
 ) -> None:
+    """Resolve a batch of bomb detonations, including chain reactions.
+
+    Processes each detonation (dispatching to rubble/super/normal blast
+    handling), following chain reactions into other bombs hit by the
+    blast, spawning cluster-bomb sub-bombs, removing detonated bombs, and
+    killing any players caught in the resulting explosions.
+
+    Parameters
+    ----------
+    state : GameState
+        Current game state; tiles, bombs, explosions, and players are
+        updated in place.
+    space : PhysicsSpace
+        Physics space to remove detonated/chained bomb bodies from and
+        to update destroyed-wall geometry on.
+    detonations : list[DetonationEvent]
+        Bombs whose fuses have just expired and must explode.
+    bus : EventBus
+        Event bus used to emit detonation, soft-block-destroyed, and
+        player-died events.
+    """
     queue: deque[DetonationEvent] = deque(detonations)
     processed_indices: set[int] = set()
     cluster_origins: list[tuple[int, int, int, int]] = []

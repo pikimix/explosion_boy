@@ -1,3 +1,5 @@
+"""Tests for LobbyManager's initial game state construction."""
+
 from uuid import uuid4
 
 from core.components import TileKind
@@ -8,15 +10,19 @@ from systems.world import map_size_for_player_count, spawn_points_for_grid
 
 class _FakeTransport:
     def poll(self, timeout: float = 0):
+        """Return no pending events, satisfying the transport polling interface."""
         return []
 
     def send(self, peer_id, data, channel):
+        """No-op stub for sending data to a single peer."""
         pass
 
     def broadcast(self, data, channel):
+        """No-op stub for broadcasting data to all peers."""
         pass
 
     def disconnect(self, peer_id):
+        """No-op stub for disconnecting a peer."""
         pass
 
 
@@ -26,6 +32,7 @@ def _join_n_players(lobby: LobbyManager, n: int) -> None:
 
 
 def test_build_initial_state_sizes_grid_by_player_count():
+    """Verify the map grid is sized according to the number of joined players."""
     for n, expected in ((2, (MIN_GRID_SIZE, MIN_GRID_SIZE)), (16, (MAX_GRID_SIZE, MAX_GRID_SIZE))):
         lobby = LobbyManager(_FakeTransport())
         _join_n_players(lobby, n)
@@ -37,6 +44,7 @@ def test_build_initial_state_sizes_grid_by_player_count():
 
 
 def test_build_initial_state_places_every_player_in_bounds():
+    """Verify every player's spawn position lies within the map bounds."""
     lobby = LobbyManager(_FakeTransport())
     _join_n_players(lobby, 5)
     state = lobby.build_initial_state(seed=2)

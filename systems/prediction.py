@@ -25,7 +25,25 @@ _SNAP_THRESHOLD = TILE_SIZE * 0.6
 
 
 class PredictionEngine:
+    """Predict and reconcile a local player's movement against the server.
+
+    Runs a local physics space seeded from the last confirmed server
+    `GameState`, applying the local player's inputs immediately for
+    responsive movement, then reconciling against authoritative server
+    snapshots as they arrive.
+    """
+
     def __init__(self, local_player_id: int, tick_rate: int = 60) -> None:
+        """Create the prediction engine for one local player.
+
+        Parameters
+        ----------
+        local_player_id : int
+            ID of the player whose movement this engine predicts.
+        tick_rate : int, optional
+            Simulation ticks per second, used to derive the fixed
+            timestep for stepping the local physics space.
+        """
         self._pid = local_player_id
         self._tick_dt: float = 1.0 / tick_rate
         self._space: PhysicsSpace = PhysicsSpace()
@@ -93,19 +111,23 @@ class PredictionEngine:
 
     @property
     def predicted_x(self) -> float:
+        """Return the locally predicted x position of the player."""
         return self._predicted_x
 
     @property
     def predicted_y(self) -> float:
+        """Return the locally predicted y position of the player."""
         return self._predicted_y
 
     @property
     def predicted_vx(self) -> float:
+        """Return the player's current predicted x velocity."""
         vx, _ = self._space.get_player_velocity(self._pid)
         return vx
 
     @property
     def predicted_vy(self) -> float:
+        """Return the player's current predicted y velocity."""
         _, vy = self._space.get_player_velocity(self._pid)
         return vy
 

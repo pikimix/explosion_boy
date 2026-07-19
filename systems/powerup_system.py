@@ -47,6 +47,18 @@ def spawn_random_powerup(state: GameState) -> None:
 
 
 def maybe_drop_powerup(state: GameState, col: int, row: int) -> None:
+    """Randomly spawn a powerup at a destroyed soft block's cell.
+
+    Parameters
+    ----------
+    state : GameState
+        Current game state; a new powerup is appended to `state.powerups`
+        on success.
+    col : int
+        Column of the destroyed soft block.
+    row : int
+        Row of the destroyed soft block.
+    """
     if random.random() >= SOFT_BLOCK_DROP_CHANCE:
         return
     kind = random.choices(_POWERUP_POPULATION, weights=_POWERUP_CUMULATIVE, k=1)[0]
@@ -54,6 +66,15 @@ def maybe_drop_powerup(state: GameState, col: int, row: int) -> None:
 
 
 def process_powerup_pickups(state: GameState) -> None:
+    """Apply and remove any powerups currently occupied by a player.
+
+    Parameters
+    ----------
+    state : GameState
+        Current game state; picked-up powerups are removed from
+        `state.powerups` and their effect is applied to the collecting
+        player's stats.
+    """
     if not state.powerups:
         return
 

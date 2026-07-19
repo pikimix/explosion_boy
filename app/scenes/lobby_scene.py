@@ -45,6 +45,8 @@ _SLIDER_SEGMENTS = 24     # gradient segments in brightness slider
 
 
 class LobbyScene:
+    """Waiting-room scene where players join, edit their name/colour, and ready up before a match starts."""
+
     def __init__(self, client: GameClient, player_name: str,
                  scene_manager: 'SceneManager',  # type: ignore[name-defined]
                  music_volume: float = 1.0,
@@ -201,6 +203,19 @@ class LobbyScene:
         return slider_left, slider_right, slider_bottom, slider_top
 
     def on_mouse_press(self, x: float, y: float, button: int, modifiers: int) -> None:
+        """Handle a left click on the colour picker, name input box, or colour swatch.
+
+        Parameters
+        ----------
+        x : float
+            X coordinate of the click, in window space.
+        y : float
+            Y coordinate of the click, in window space.
+        button : int
+            Mouse button that was pressed.
+        modifiers : int
+            Bitmask of modifier keys held during the click.
+        """
         if button != arcade.MOUSE_BUTTON_LEFT:
             return
         if self._picker_open:
@@ -234,6 +249,17 @@ class LobbyScene:
     def on_mouse_drag(
         self, x: float, y: float, _dx: float, _dy: float, buttons: int, _modifiers: int
     ) -> None:
+        """Update the colour picker while the left mouse button is dragged across it.
+
+        Parameters
+        ----------
+        x : float
+            Current X coordinate of the pointer, in window space.
+        y : float
+            Current Y coordinate of the pointer, in window space.
+        buttons : int
+            Bitmask of mouse buttons currently held down.
+        """
         if buttons & arcade.MOUSE_BUTTON_LEFT and self._picker_open:
             self._handle_picker_input(x, y)
 
@@ -312,6 +338,17 @@ class LobbyScene:
     # ── Network ───────────────────────────────────────────────────────────────
 
     def update(self, dt: float) -> None:
+        """Advance the name-cursor blink timer and process pending network messages.
+
+        Applies lobby updates (player list, ready status, colour sync to the
+        server) and swaps to `GameScene` when the server sends a game-start
+        message.
+
+        Parameters
+        ----------
+        dt : float
+            Time elapsed, in seconds, since the previous update.
+        """
         self._cursor_blink = (self._cursor_blink + dt) % 1.0
         if self._client.reject_reason is not None:
             return
@@ -348,6 +385,7 @@ class LobbyScene:
     # ── Draw ──────────────────────────────────────────────────────────────────
 
     def draw(self) -> None:
+        """Render the map preview, title/waiting text, HUD, colour picker, and connection overlays."""
         with self._camera.activate():
             self._tile_shapes.draw()
             self._spawn_shapes.draw()
@@ -513,6 +551,15 @@ class LobbyScene:
         self._picker_close_text.draw()
 
     def on_resize(self, width: int, height: int) -> None:
+        """Rebuild the camera and reposition title/waiting text after a window resize.
+
+        Parameters
+        ----------
+        width : int
+            New window width, in pixels.
+        height : int
+            New window height, in pixels.
+        """
         self._camera = self._make_camera(width, height)
         play_cx = HUD_WIDTH + (width - HUD_WIDTH) / 2
         self._title_text.x = play_cx
@@ -521,6 +568,14 @@ class LobbyScene:
         self._waiting_text.y = height / 2
 
     def on_text(self, text: str) -> None:
+        """Append printable characters typed by the player to the in-progress name draft.
+
+        Parameters
+        ----------
+        text : str
+            Text input reported by the window; ignored unless the name box
+            is currently being edited.
+        """
         if not self._editing_name:
             return
         for ch in text:
@@ -537,6 +592,15 @@ class LobbyScene:
             user_prefs.set_pref('name', stripped)
 
     def on_key_press(self, key: int, modifiers: int) -> None:
+        """Handle name-editing keys, ESCAPE (close picker or open pause menu), and SPACE (toggle ready).
+
+        Parameters
+        ----------
+        key : int
+            Key code of the pressed key.
+        modifiers : int
+            Bitmask of modifier keys held during the press.
+        """
         if self._editing_name:
             if key == arcade.key.BACKSPACE:
                 self._name_draft = self._name_draft[:-1]
@@ -558,6 +622,7 @@ class LobbyScene:
             self._client.send_ready(self._ready)
 
     def on_key_release(self, key: int, modifiers: int) -> None:
+        """Do nothing; required by arcade's key-release event interface."""
         pass
 
     # ── Spawn markers ─────────────────────────────────────────────────────────

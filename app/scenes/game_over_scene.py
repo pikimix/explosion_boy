@@ -8,6 +8,8 @@ from net.protocol import GameOverMsg
 
 
 class GameOverScene:
+    """Show the winner/draw result with play-again and quit buttons."""
+
     def __init__(self, result: GameOverMsg,
                  scene_manager: "SceneManager",  # type: ignore[name-defined]
                  client: "GameClient",            # type: ignore[name-defined]
@@ -81,9 +83,10 @@ class GameOverScene:
         arcade.exit()
 
     def update(self, dt: float) -> None:
-        pass
+        """Update scene state for the elapsed time (no-op for this scene)."""
 
     def draw(self) -> None:
+        """Draw the background, headline/subheadline text and UI buttons."""
         win = arcade.get_window()
         if self._background_texture:
             screen_rect = arcade.LRBT(0, win.width, 0, win.height)
@@ -99,7 +102,7 @@ class GameOverScene:
         self._ui.draw()
 
     def on_key_press(self, key: int, modifiers: int) -> None:
-        pass
+        """Handle a key press event (no-op for this scene)."""
 
     def on_key_release(self, key: int, modifiers: int) -> None:
-        pass
+        """Handle a key release event (no-op for this scene)."""

@@ -24,14 +24,20 @@ CHANNEL_UNRELIABLE = 1   # state snapshots — only latest matters
 # ── Transport events ───────────────────────────────────────────────────────────
 @dataclass(frozen=True, slots=True)
 class ConnectEvent:
+    """Event emitted when a peer establishes a connection."""
+
     peer_id: UUID
 
 @dataclass(frozen=True, slots=True)
 class DisconnectEvent:
+    """Event emitted when a peer's connection is closed or lost."""
+
     peer_id: UUID
 
 @dataclass(frozen=True, slots=True)
 class ReceiveEvent:
+    """Event emitted when data is received from a peer on a channel."""
+
     peer_id: UUID
     channel: int
     data: bytes
@@ -58,8 +64,19 @@ class ServerTransport(Protocol):
         """Send data to every connected peer."""
         ...
 
-    def disconnect(self, peer_id: UUID) -> None: ...
-    def close(self) -> None: ...
+    def disconnect(self, peer_id: UUID) -> None:
+        """Forcibly disconnect a single peer.
+
+        Parameters
+        ----------
+        peer_id : UUID
+            Identifier of the peer to disconnect.
+        """
+        ...
+
+    def close(self) -> None:
+        """Shut down the transport and release any underlying resources."""
+        ...
 
 
 @runtime_checkable
@@ -67,14 +84,37 @@ class ClientTransport(Protocol):
     """Non-blocking client-side transport. Call poll() each frame."""
 
     @property
-    def connected(self) -> bool: ...
+    def connected(self) -> bool:
+        """Return whether the client currently has an active connection.
+
+        Returns
+        -------
+        bool
+            True if connected, False otherwise.
+        """
+        ...
 
     def poll(self, timeout: float = 0) -> list[TransportEvent]:
         """Return all pending events. Blocks up to *timeout* seconds (0 = non-blocking)."""
         ...
 
-    def send(self, data: bytes, channel: int = CHANNEL_RELIABLE) -> None: ...
-    def disconnect(self) -> None: ...
+    def send(self, data: bytes, channel: int = CHANNEL_RELIABLE) -> None:
+        """Send data to the server.
+
+        Parameters
+        ----------
+        data : bytes
+            Payload to send.
+        channel : int, optional
+            Channel to send on, `CHANNEL_RELIABLE` or `CHANNEL_UNRELIABLE`
+            (default is `CHANNEL_RELIABLE`).
+        """
+        ...
+
+    def disconnect(self) -> None:
+        """Close the connection to the server."""
+        ...
+
     def reconnect(self) -> None:
         """Close any existing connection and initiate a fresh non-blocking connect."""
         ...

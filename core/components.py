@@ -6,18 +6,21 @@ from enum import IntEnum
 
 
 class TileKind(IntEnum):
+    """The kind of terrain occupying a single grid cell."""
     EMPTY      = 0
     SOLID_WALL = 1
     SOFT_BLOCK = 2
 
 
 class GamePhase(IntEnum):
+    """The current stage of the overall match lifecycle."""
     LOBBY     = 0
     PLAYING   = 1
     GAME_OVER = 2
 
 
 class PowerupKind(IntEnum):
+    """The type of powerup a player can collect and its effect."""
     EXTRA_BOMB            = 1
     BLAST_UP              = 2
     SHIELD                = 3
@@ -42,6 +45,7 @@ class PhysicsState:
 
 @dataclass
 class PlayerStats:
+    """A player's persistent gameplay stats and active powerup effects."""
     player_id: int
     lives: int          = 1
     bomb_capacity: int  = 1
@@ -77,6 +81,7 @@ class BombComponent:
 
 @dataclass
 class ExplosionCenter:
+    """The origin cell of an active explosion and its remaining lifetime."""
     col: int
     row: int
     ticks_remaining: int
@@ -84,6 +89,7 @@ class ExplosionCenter:
 
 @dataclass
 class ExplosionRay:
+    """One directional arm of blast radiating out from an explosion center."""
     origin_col: int
     origin_row: int
     direction: tuple[int, int]
@@ -93,6 +99,7 @@ class ExplosionRay:
 
 @dataclass
 class PowerupComponent:
+    """A powerup item sitting on the grid, waiting to be collected."""
     kind: PowerupKind
     col: int
     row: int
@@ -100,6 +107,7 @@ class PowerupComponent:
 
 @dataclass
 class PlayerInput:
+    """A player's per-tick input: movement direction and bomb placement."""
     player_id: int
     tick: int
     move_x: float              # -1.0 … 1.0  (keyboard: -1 / 0 / 1)
@@ -109,6 +117,20 @@ class PlayerInput:
 
 # Neutral input used when a player sends nothing for a tick
 def neutral_input(player_id: int, tick: int) -> PlayerInput:
+    """Build a `PlayerInput` representing no movement and no bomb placement.
+
+    Parameters
+    ----------
+    player_id : int
+        The player this input belongs to.
+    tick : int
+        The simulation tick this input applies to.
+
+    Returns
+    -------
+    PlayerInput
+        A neutral input used when a player sends nothing for a tick.
+    """
     return PlayerInput(
         player_id=player_id, tick=tick,
         move_x=0.0, move_y=0.0, place_bomb=False,

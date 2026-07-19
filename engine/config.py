@@ -1,3 +1,5 @@
+"""Game-wide constants: grid/window sizing, timing, physics tuning, and colours."""
+
 TILE_SIZE = 48          # pixels per tile
 GRID_COLS = 25          # fallback default only — real rounds size the grid via map_size_for_player_count
 GRID_ROWS = 25

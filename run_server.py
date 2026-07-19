@@ -9,6 +9,7 @@ from engine.transport import make_server_transport
 
 
 def main() -> None:
+    """Parse CLI arguments, build the transport, and run the game server."""
     parser = argparse.ArgumentParser(description="Explosion Boy server")
     parser.add_argument("--host", default=os.environ.get("SERVER_HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("SERVER_PORT", DEFAULT_PORT)))

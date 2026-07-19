@@ -17,6 +17,8 @@ from core.components import (
 
 @dataclass
 class GameState:
+    """Canonical, fully serialisable snapshot of the world at a given tick."""
+
     tick: int
     map_cols: int
     map_rows: int

@@ -60,6 +60,8 @@ def _ts() -> str:
 
 
 class GameServer:
+    """Authoritative headless game server owning simulation, networking, and rollback."""
+
     def __init__(
         self,
         transport: ServerTransport,
@@ -94,6 +96,7 @@ class GameServer:
         self._bus.subscribe(PlayerDiedEvent, self._on_player_died)
 
     def run(self) -> None:
+        """Run the main server loop, polling the transport and ticking the game forever."""
         print(f"[{_ts()}] Server running at {self._tick_rate} tps "
               f"(rollback window: {self._rollback_buffer_size} ticks). Waiting for players…")
         while True:

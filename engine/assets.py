@@ -13,6 +13,18 @@ _textures: dict[str, "arcade.Texture"] = {}
 
 
 def load_texture(name: str) -> "arcade.Texture":
+    """Load a texture from the assets directory, caching it for subsequent calls.
+
+    Parameters
+    ----------
+    name : str
+        Base filename (without extension) of the PNG under the assets directory.
+
+    Returns
+    -------
+    arcade.Texture
+        The loaded (or cached) texture.
+    """
     if name not in _textures:
         import arcade
         path = _ASSETS_DIR / f"{name}.png"
@@ -21,4 +33,5 @@ def load_texture(name: str) -> "arcade.Texture":
 
 
 def clear_cache() -> None:
+    """Clear the in-memory texture cache."""
     _textures.clear()

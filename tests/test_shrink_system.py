@@ -1,3 +1,5 @@
+"""Tests for the perimeter shrink system's trigger timing, warning ring, and ring closure."""
+
 from core.components import BombComponent, PhysicsState, PlayerStats, TileKind
 from core.state import GameState
 from engine.config import (
@@ -44,6 +46,7 @@ def _make_round(num_players: int, seed: int = 1) -> tuple[GameState, PhysicsSpac
 
 
 def test_shrink_does_not_trigger_before_timer_or_player_threshold():
+    """Shrink stays inactive before the trigger timer and above the player-count threshold."""
     state, space, bus, _died = _make_round(3)
     state.tick = SHRINK_TRIGGER_TICKS - 1
     process_perimeter_shrink(state, space, bus)
@@ -51,6 +54,7 @@ def test_shrink_does_not_trigger_before_timer_or_player_threshold():
 
 
 def test_shrink_triggers_on_timer_and_begins_warning_ring_one():
+    """Reaching the trigger tick activates shrink and starts the ring-1 warning countdown."""
     state, space, bus, _died = _make_round(3)
     state.tick = SHRINK_TRIGGER_TICKS
     process_perimeter_shrink(state, space, bus)
@@ -60,6 +64,7 @@ def test_shrink_triggers_on_timer_and_begins_warning_ring_one():
 
 
 def test_shrink_triggers_immediately_when_dropping_to_two_players():
+    """Shrink activates immediately once the player count drops to two, regardless of the timer."""
     state, space, bus, _died = _make_round(3)
     state.players.pop(2)
     state.tick = 100  # well before the 5-minute timer
@@ -69,6 +74,7 @@ def test_shrink_triggers_immediately_when_dropping_to_two_players():
 
 
 def test_shrink_does_not_trigger_immediately_for_a_round_that_starts_with_two_players():
+    """A round starting with two players must wait for the timer, not shrink on tick one."""
     state, space, bus, _died = _make_round(2)
     state.tick = 100
     process_perimeter_shrink(state, space, bus)
@@ -80,6 +86,7 @@ def test_shrink_does_not_trigger_immediately_for_a_round_that_starts_with_two_pl
 
 
 def test_tiles_stay_passable_during_the_warning_window():
+    """Ring tiles remain passable while the warning is active and have not yet closed."""
     state, space, bus, _died = _make_round(3)
     state.tick = SHRINK_TRIGGER_TICKS
     process_perimeter_shrink(state, space, bus)
@@ -88,6 +95,7 @@ def test_tiles_stay_passable_during_the_warning_window():
 
 
 def test_ring_closes_kills_occupant_and_removes_bomb_after_warning_expires():
+    """When ring 1 closes, an occupant standing on it dies and a bomb sitting on it is removed."""
     state, space, bus, died = _make_round(3)
 
     # Move every player away from ring 1 first — on small grids the default
@@ -130,6 +138,7 @@ def test_ring_closes_kills_occupant_and_removes_bomb_after_warning_expires():
 
 
 def test_next_ring_warning_starts_interval_ticks_after_previous_close():
+    """The next ring's warning starts exactly one interval after the previous ring closes."""
     # Use the largest round (25x25) — small grids hit the SHRINK_MIN_INTERIOR_AXIS
     # floor after only one ring, which would make this test's second-ring
     # assertion vacuous (see test_shrink_stops_permanently_once_floor_reached).
@@ -160,6 +169,7 @@ def test_next_ring_warning_starts_interval_ticks_after_previous_close():
 
 
 def test_shrink_stops_permanently_once_floor_reached():
+    """Shrink stops for good once the interior would drop below the minimum viable axis size."""
     state, space, bus, _died = _make_round(2)  # smallest grid: 7x7
     state.tick = SHRINK_TRIGGER_TICKS
     process_perimeter_shrink(state, space, bus)

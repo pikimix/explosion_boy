@@ -52,6 +52,25 @@ def _close_ring(state: GameState, space: PhysicsSpace, bus: EventBus, ring: int)
 
 
 def process_perimeter_shrink(state: GameState, space: PhysicsSpace, bus: EventBus) -> None:
+    """Drive the endgame perimeter shrink: trigger, warn, and close rings.
+
+    Starts the shrink once the tick count or remaining player count crosses
+    a threshold, then alternates between warning ticks and closing the
+    next ring into unbreakable walls, killing any players or bombs caught
+    inside.
+
+    Parameters
+    ----------
+    state : GameState
+        Current game state; shrink progress fields, tiles, and players
+        are updated in place.
+    space : PhysicsSpace
+        Physics space to add closed-ring walls to and remove destroyed
+        bombs from.
+    bus : EventBus
+        Event bus used to emit `PlayerDiedEvent` for players caught in a
+        closing ring.
+    """
     if not state.shrink_active:
         player_trigger = (
             len(state.players) <= SHRINK_TRIGGER_PLAYER_COUNT < state.starting_player_count
