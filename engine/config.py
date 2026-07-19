@@ -29,11 +29,11 @@ SHRINK_TRIGGER_TICKS = round(SHRINK_TRIGGER_SECONDS * TICK_RATE)  # 18000 at 60 
 SHRINK_INTERVAL_TICKS = round(SHRINK_INTERVAL_SECONDS * TICK_RATE)  # 1800 at 60 tps
 SHRINK_WARN_TICKS = BOMB_FUSE_TICKS       # rings flash for the same duration as a bomb fuse
 SHRINK_TRIGGER_PLAYER_COUNT = 2           # trigger once alive count drops to/below this
-SHRINK_MIN_INTERIOR_AXIS = 7              # stop permanently once a ring would leave less than this on either axis
+SHRINK_MIN_INTERIOR_AXIS = 5              # stop permanently once a ring would leave less than this on either axis
 
 # ── Player-count-scaled starting grid ─────────────────────────────────────────
-MIN_GRID_SIZE = 7    # square grid side at 2 players (both endpoints kept odd for border/pillar symmetry)
-MAX_GRID_SIZE = 25   # square grid side at MAX_PLAYERS
+MIN_GRID_SIZE = 9    # square grid side at 2 players (both endpoints kept odd for border/pillar symmetry)
+MAX_GRID_SIZE = 29   # square grid side at MAX_PLAYERS
 
 MAX_PLAYER_SPEED = 180.0        # pixels per second
 PLAYER_RADIUS = TILE_SIZE * 0.38
