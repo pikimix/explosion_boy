@@ -34,7 +34,7 @@ SHRINK_TRIGGER_PLAYER_COUNT = 2           # trigger once alive count drops to/be
 SHRINK_MIN_INTERIOR_AXIS = 5              # stop permanently once a ring would leave less than this on either axis
 
 # ── Player-count-scaled starting grid ─────────────────────────────────────────
-MIN_GRID_SIZE = 9    # square grid side at 2 players (both endpoints kept odd for border/pillar symmetry)
+MIN_GRID_SIZE = 11    # square grid side at 2 players (both endpoints kept odd for border/pillar symmetry)
 MAX_GRID_SIZE = 29   # square grid side at MAX_PLAYERS
 
 MAX_PLAYER_SPEED = 180.0        # pixels per second
