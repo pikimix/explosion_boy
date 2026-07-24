@@ -54,7 +54,7 @@ def process_detonations(
     """
     queue: deque[DetonationEvent] = deque(detonations)
     processed_indices: set[int] = set()
-    cluster_origins: list[tuple[int, int, int, int]] = []
+    cluster_origins: list[tuple[int, int, int, int, bool, bool]] = []
     bomb_by_cell: dict[tuple[int, int], int] = {
         (b.col, b.row): bi for bi, b in enumerate(state.bombs)
     }
@@ -127,7 +127,10 @@ def process_detonations(
                     ))
 
         if det.is_cluster:
-            cluster_origins.append((det.col, det.row, det.blast_radius, det.blast_penetration))
+            cluster_origins.append((
+                det.col, det.row, det.blast_radius, det.blast_penetration,
+                det.is_super, det.is_rubble,
+            ))
 
     remove_bombs(state, space, list(processed_indices))
     if cluster_origins:
@@ -177,8 +180,12 @@ def _rubble_bomb_explosion(
     queue: deque[DetonationEvent],
     processed_indices: set[int],
 ) -> None:
-    """AOE explosion like super bomb, then scatters soft blocks on empty cells (1-in-5 chance)."""
-    half = max(2, det.blast_radius // 2)
+    """AOE explosion like super bomb, then scatters soft blocks on empty cells (1-in-5 chance).
+
+    Combined with a super powerup, the AOE is the full blast radius rather
+    than halved, so collecting both upgrades the rubble bomb's reach.
+    """
+    half = det.blast_radius if det.is_super else max(2, det.blast_radius // 2)
     affected: list[tuple[int, int]] = []
 
     for dr in range(-half, half + 1):
@@ -220,13 +227,18 @@ def _rubble_bomb_explosion(
 def _spawn_cluster_sub_bombs(
     state: GameState,
     space: PhysicsSpace,
-    origins: list[tuple[int, int, int]],
+    origins: list[tuple[int, int, int, int, bool, bool]],
 ) -> None:
-    """Spawn up to 4 sub-bombs from each cluster origin; sub-bombs don't count toward cap."""
+    """Spawn up to 4 sub-bombs from each cluster origin; sub-bombs don't count toward cap.
+
+    Sub-bombs inherit the origin bomb's super/rubble status, so a cluster
+    combined with a super or rubble powerup produces sub-bombs of that
+    same upgraded kind.
+    """
     from core.components import BombComponent
     from systems.powerup_system import CLUSTER_SUB_FUSE_TICKS
 
-    for col, row, blast_radius, blast_penetration in origins:
+    for col, row, blast_radius, blast_penetration, is_super, is_rubble in origins:
         bomb_cells = {(b.col, b.row) for b in state.bombs}
         for dc, dr in _DIRECTIONS:
             for dist in range(1, 4):
@@ -247,6 +259,8 @@ def _spawn_cluster_sub_bombs(
                     blast_radius=blast_radius,
                     col=c, row=r, px=px, py=py,
                     blast_penetration=blast_penetration,
+                    is_super=is_super,
+                    is_rubble=is_rubble,
                 )
                 state.bombs.append(sub)
                 space.add_bomb(len(state.bombs) - 1, px, py)
