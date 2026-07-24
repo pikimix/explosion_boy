@@ -170,18 +170,31 @@ def test_next_ring_warning_starts_interval_ticks_after_previous_close():
 
 def test_shrink_stops_permanently_once_floor_reached():
     """Shrink stops for good once the interior would drop below the minimum viable axis size."""
-    state, space, bus, _died = _make_round(2)  # smallest grid: 7x7
+    state, space, bus, _died = _make_round(2)  # smallest grid: 11x11
     state.tick = SHRINK_TRIGGER_TICKS
     process_perimeter_shrink(state, space, bus)
     assert state.shrink_active
     assert state.shrink_warn_ring == 1
 
-    # 7x7 interior after closing ring 1 is 3x3 (< SHRINK_MIN_INTERIOR_AXIS=7),
-    # so ring 2 must never open — shrink should stop right after ring 1 closes.
+    # Close ring 1: 11x11 interior after ring 1 is 7x7, still >= SHRINK_MIN_INTERIOR_AXIS=5.
     for _ in range(SHRINK_WARN_TICKS):
         state.tick += 1
         process_perimeter_shrink(state, space, bus)
     assert state.shrink_ring == 1
+    assert not state.shrink_stopped
+
+    # Advance to and start the ring 2 warning, then close it.
+    state.tick = state.shrink_next_warn_tick
+    process_perimeter_shrink(state, space, bus)
+    assert state.shrink_warn_ring == 2
+    for _ in range(SHRINK_WARN_TICKS):
+        state.tick += 1
+        process_perimeter_shrink(state, space, bus)
+    assert state.shrink_ring == 2
+
+    # Interior after closing ring 2 is 5x5; ring 3 would leave only 3x3
+    # (< SHRINK_MIN_INTERIOR_AXIS=5), so ring 3 must never open — shrink
+    # should stop right after ring 2 closes.
     assert state.shrink_stopped
 
     # Further ticks must not resume shrinking.
@@ -189,4 +202,4 @@ def test_shrink_stops_permanently_once_floor_reached():
         state.tick += 1
         process_perimeter_shrink(state, space, bus)
     assert state.shrink_warn_ring == 0
-    assert state.shrink_ring == 1
+    assert state.shrink_ring == 2
