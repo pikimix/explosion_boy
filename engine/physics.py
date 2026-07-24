@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pymunk
 
+from core.components import Cell, Position, Velocity
 from engine.config import (
     BOMB_FRICTION,
     BOMB_HALF_SIZE,
@@ -35,7 +36,7 @@ class PhysicsSpace:
         self._space.damping = PLAYER_DAMPING
         self._player_bodies: dict[int, tuple[pymunk.Body, pymunk.Shape]] = {}
         self._bomb_bodies: dict[int, tuple[pymunk.Body, pymunk.Shape]] = {}
-        self._static_shapes: dict[tuple[int, int], pymunk.Shape] = {}
+        self._static_shapes: dict[Cell, pymunk.Shape] = {}
         self._tiles: list[list[int]] = []
 
         # Collision handler: player (type 1) pushes bomb (type 2)
@@ -63,7 +64,7 @@ class PhysicsSpace:
         for row in range(rows):
             for col in range(cols):
                 if tiles[row][col] != _PASSABLE_TILE:
-                    self._static_shapes[(col, row)] = self._make_wall_shape(col, row)
+                    self._static_shapes[Cell(col, row)] = self._make_wall_shape(col, row)
 
     def _make_wall_shape(self, col: int, row: int) -> pymunk.Shape:
         x = col * TILE_SIZE
@@ -86,7 +87,7 @@ class PhysicsSpace:
         row : int
             Tile row index.
         """
-        shape = self._static_shapes.pop((col, row), None)
+        shape = self._static_shapes.pop(Cell(col, row), None)
         if shape is not None:
             self._space.remove(shape)
         if self._tiles:
@@ -107,8 +108,8 @@ class PhysicsSpace:
             rubble-bomb scatter). Pass ``TileKind.SOLID_WALL`` explicitly for
             indestructible walls such as the perimeter shrink.
         """
-        if (col, row) not in self._static_shapes:
-            self._static_shapes[(col, row)] = self._make_wall_shape(col, row)
+        if Cell(col, row) not in self._static_shapes:
+            self._static_shapes[Cell(col, row)] = self._make_wall_shape(col, row)
         if self._tiles:
             self._tiles[row][col] = kind
 
@@ -163,7 +164,7 @@ class PhysicsSpace:
         if entry := self._player_bodies.get(player_id):
             entry[0].velocity = (vx, vy)
 
-    def get_player_position(self, player_id: int) -> tuple[float, float] | None:
+    def get_player_position(self, player_id: int) -> Position | None:
         """Get a player's current position.
 
         Parameters
@@ -173,16 +174,16 @@ class PhysicsSpace:
 
         Returns
         -------
-        tuple of float, or None
-            The ``(x, y)`` position in pixels, or None if the player has no
+        Position or None
+            The player's position in pixels, or None if the player has no
             body in the space.
         """
         if entry := self._player_bodies.get(player_id):
             pos = entry[0].position
-            return pos.x, pos.y
+            return Position(pos.x, pos.y)
         return None
 
-    def get_player_velocity(self, player_id: int) -> tuple[float, float]:
+    def get_player_velocity(self, player_id: int) -> Velocity:
         """Get a player's current velocity.
 
         Parameters
@@ -192,14 +193,14 @@ class PhysicsSpace:
 
         Returns
         -------
-        tuple of float
-            The ``(vx, vy)`` velocity in pixels per second, or ``(0.0, 0.0)``
+        Velocity
+            The player's velocity in pixels per second, or a zero velocity
             if the player has no body in the space.
         """
         if entry := self._player_bodies.get(player_id):
             v = entry[0].velocity
-            return v.x, v.y
-        return (0.0, 0.0)
+            return Velocity(v.x, v.y)
+        return Velocity(0.0, 0.0)
 
     def has_player(self, player_id: int) -> bool:
         """Check whether a player currently has a body in the space.
@@ -256,7 +257,7 @@ class PhysicsSpace:
             body, shape = entry
             self._space.remove(body, shape)
 
-    def get_bomb_position(self, bomb_idx: int) -> tuple[float, float] | None:
+    def get_bomb_position(self, bomb_idx: int) -> Position | None:
         """Get a bomb's current position.
 
         Parameters
@@ -266,13 +267,13 @@ class PhysicsSpace:
 
         Returns
         -------
-        tuple of float, or None
-            The ``(x, y)`` position in pixels, or None if the bomb has no
+        Position or None
+            The bomb's position in pixels, or None if the bomb has no
             body in the space.
         """
         if entry := self._bomb_bodies.get(bomb_idx):
             pos = entry[0].position
-            return pos.x, pos.y
+            return Position(pos.x, pos.y)
         return None
 
     def bomb_indices(self) -> list[int]:

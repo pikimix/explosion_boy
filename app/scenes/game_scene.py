@@ -9,7 +9,7 @@ import arcade
 
 from app.game_view import GameView
 from app.sound_system import SoundSystem
-from core.components import PlayerInput
+from core.components import Colour, PlayerInput
 from core.state import GameState
 from net.client import GameClient
 from net.protocol import GameOverMsg, GameStartMsg, InputMsg
@@ -36,13 +36,13 @@ class GameScene:
                  player_name: str = "Player",
                  music_volume: float = 1.0,
                  sfx_volume: float = 1.0,
-                 colour_rgb: tuple[int, int, int] = (220, 50, 50),
+                 colour: Colour = Colour(220, 50, 50),
                  debug: bool = False,
                  start_state: GameState | None = None) -> None:
         self._client = client
         self._scene_manager = scene_manager
         self._player_name = player_name
-        self._colour_rgb = colour_rgb
+        self._colour = colour
         self._debug = debug
         self._view = GameView()
         self._sounds = SoundSystem(client.player_id, music_volume=music_volume, sfx_volume=sfx_volume)
@@ -187,7 +187,7 @@ class GameScene:
                 GameOverScene(msg, self._scene_manager, self._client, self._player_name,
                               music_volume=self._sounds.music_volume,
                               sfx_volume=self._sounds.sfx_volume,
-                              colour_rgb=self._colour_rgb,
+                              colour=self._colour,
                               debug=self._debug,
                               background_texture=bg_texture)
             )

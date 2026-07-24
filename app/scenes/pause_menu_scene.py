@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import arcade
 
+from app.ui.geometry import Bounds
 from engine import user_prefs
 
 _OVERLAY_COLOUR = (0, 0, 0, 160)
@@ -71,9 +72,9 @@ class PauseMenuScene:
 
     # ── Geometry helpers ──────────────────────────────────────────────────────
 
-    def _panel_bounds(self, win: arcade.Window) -> tuple[float, float, float, float]:
+    def _panel_bounds(self, win: arcade.Window) -> Bounds:
         cx, cy = win.width / 2, win.height / 2
-        return cx - _PANEL_W / 2, cy - _PANEL_H / 2, cx + _PANEL_W / 2, cy + _PANEL_H / 2
+        return Bounds(cx - _PANEL_W / 2, cx + _PANEL_W / 2, cy - _PANEL_H / 2, cy + _PANEL_H / 2)
 
     def _slider_left(self, win: arcade.Window) -> float:
         return win.width / 2 - _PANEL_W / 2 + 175
@@ -81,10 +82,10 @@ class PauseMenuScene:
     def _slider_cy(self, win: arcade.Window, idx: int) -> float:
         return win.height / 2 + _SLIDER_Y_OFFSETS[idx]
 
-    def _btn_bounds(self, win: arcade.Window) -> tuple[float, float, float, float]:
+    def _btn_bounds(self, win: arcade.Window) -> Bounds:
         cx, cy = win.width / 2, win.height / 2
         pb = cy - _PANEL_H / 2
-        return (cx - _BTN_W / 2, pb + 28, cx + _BTN_W / 2, pb + 28 + _BTN_H)
+        return Bounds(cx - _BTN_W / 2, cx + _BTN_W / 2, pb + 28, pb + 28 + _BTN_H)
 
     def _value_from_x(self, x: float, sl: float) -> float:
         return max(0.0, min(1.0, (x - sl) / _SLIDER_W))
@@ -96,23 +97,23 @@ class PauseMenuScene:
             return
 
         cx = win.width / 2
-        pl, pb, _, pt = self._panel_bounds(win)
+        panel = self._panel_bounds(win)
         sl = self._slider_left(win)
-        label_x = pl + 18
+        label_x = panel.left + 18
 
         self._title_text = arcade.Text(
-            'PAUSED', cx, pt - 28,
+            'PAUSED', cx, panel.top - 28,
             color=_TITLE_COLOUR, font_size=22, bold=True,
             anchor_x='center', anchor_y='top',
         )
         self._hint_text = arcade.Text(
-            'Press ESC to resume', cx, pb + 10,
+            'Press ESC to resume', cx, panel.bottom + 10,
             color=_HINT_COLOUR, font_size=9,
             anchor_x='center', anchor_y='bottom',
         )
-        bl, bb, br, bt = self._btn_bounds(win)
+        btn = self._btn_bounds(win)
         self._resume_text = arcade.Text(
-            'Resume', (bl + br) / 2, (bb + bt) / 2,
+            'Resume', (btn.left + btn.right) / 2, (btn.bottom + btn.top) / 2,
             color=_BTN_TEXT_COLOUR, font_size=13, bold=True,
             anchor_x='center', anchor_y='center',
         )
@@ -148,14 +149,14 @@ class PauseMenuScene:
 
         win = arcade.get_window()
         self._ensure_texts(win)
-        pl, pb, _, _ = self._panel_bounds(win)
+        panel = self._panel_bounds(win)
 
         # Full-screen dim
         arcade.draw_rect_filled(arcade.LBWH(0, 0, win.width, win.height), _OVERLAY_COLOUR)
 
         # Panel
-        arcade.draw_rect_filled(arcade.LBWH(pl, pb, _PANEL_W, _PANEL_H), _PANEL_COLOUR)
-        arcade.draw_rect_outline(arcade.LBWH(pl, pb, _PANEL_W, _PANEL_H), _PANEL_BORDER, border_width=1)
+        arcade.draw_rect_filled(arcade.LBWH(panel.left, panel.bottom, _PANEL_W, _PANEL_H), _PANEL_COLOUR)
+        arcade.draw_rect_outline(arcade.LBWH(panel.left, panel.bottom, _PANEL_W, _PANEL_H), _PANEL_BORDER, border_width=1)
 
         self._title_text.draw()  # type: ignore[union-attr]
         self._hint_text.draw()   # type: ignore[union-attr]
@@ -188,8 +189,8 @@ class PauseMenuScene:
             self._slider_value_texts[i].draw()
 
         # Resume button
-        bl, bb, br, bt = self._btn_bounds(win)
-        btn_cx, btn_cy = (bl + br) / 2, (bb + bt) / 2
+        btn = self._btn_bounds(win)
+        btn_cx, btn_cy = (btn.left + btn.right) / 2, (btn.bottom + btn.top) / 2
         btn_col = _BTN_HOVER_COLOUR if self._resume_hovered else _BTN_COLOUR
         arcade.draw_rect_filled(arcade.XYWH(btn_cx, btn_cy, _BTN_W, _BTN_H), btn_col)
         arcade.draw_rect_outline(arcade.XYWH(btn_cx, btn_cy, _BTN_W, _BTN_H), _BTN_BORDER, border_width=1)
@@ -213,8 +214,8 @@ class PauseMenuScene:
         """
         win = arcade.get_window()
 
-        bl, bb, br, bt = self._btn_bounds(win)
-        if bl <= x <= br and bb <= y <= bt:
+        btn = self._btn_bounds(win)
+        if btn.left <= x <= btn.right and btn.bottom <= y <= btn.top:
             self._scene_manager.pop()
             return
 
@@ -239,8 +240,8 @@ class PauseMenuScene:
     def on_mouse_motion(self, x: float, y: float, dx: float, dy: float) -> None:
         """Track whether the cursor is hovering the resume button, for highlighting."""
         win = arcade.get_window()
-        bl, bb, br, bt = self._btn_bounds(win)
-        self._resume_hovered = bl <= x <= br and bb <= y <= bt
+        btn = self._btn_bounds(win)
+        self._resume_hovered = btn.left <= x <= btn.right and btn.bottom <= y <= btn.top
 
     def _apply_drag(self, idx: int, x: float, win: arcade.Window) -> None:
         sl = self._slider_left(win)

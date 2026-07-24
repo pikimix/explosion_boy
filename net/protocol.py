@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from core.components import Colour
 from core.serialiser import decode_msg, encode_msg, decode_state
 from core.state import GameState
 
@@ -74,7 +75,7 @@ class ReadyMsg:
 class ColourMsg:
     """Client request to set the player's chosen colour."""
 
-    colour_rgb: tuple[int, int, int]
+    colour: Colour
     TYPE: str = 'colour'
 
     def encode(self) -> bytes:
@@ -85,8 +86,7 @@ class ColourMsg:
         bytes
             The encoded message ready to be sent over the network.
         """
-        r, g, b = self.colour_rgb
-        return encode_msg({'type': self.TYPE, 'r': r, 'g': g, 'b': b})
+        return encode_msg({'type': self.TYPE, 'r': self.colour.r, 'g': self.colour.g, 'b': self.colour.b})
 
     @staticmethod
     def decode(d: dict) -> 'ColourMsg':
@@ -102,7 +102,7 @@ class ColourMsg:
         ColourMsg
             The reconstructed message.
         """
-        return ColourMsg(colour_rgb=(d['r'], d['g'], d['b']))
+        return ColourMsg(colour=Colour(d['r'], d['g'], d['b']))
 
 
 @dataclass

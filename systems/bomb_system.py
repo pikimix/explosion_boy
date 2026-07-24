@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from core.components import BombComponent, PlayerInput
+from core.components import BombComponent, Cell, PlayerInput
 from core.state import GameState
 from engine.config import BOMB_FUSE_TICKS, TILE_SIZE
 from engine.physics import PhysicsSpace
@@ -47,7 +47,7 @@ def apply_new_bombs(
         Per-player inputs for this tick; only those with `place_bomb`
         set are considered.
     """
-    bomb_cells: set[tuple[int, int]] = {(b.col, b.row) for b in state.bombs}
+    bomb_cells: set[Cell] = {Cell(b.col, b.row) for b in state.bombs}
     for inp in inputs:
         if not inp.place_bomb:
             continue
@@ -65,7 +65,7 @@ def apply_new_bombs(
         col = int(phys.x // TILE_SIZE)
         row = int(phys.y // TILE_SIZE)
 
-        if (col, row) in bomb_cells:
+        if Cell(col, row) in bomb_cells:
             continue
 
         px = col * TILE_SIZE + TILE_SIZE / 2
@@ -88,7 +88,7 @@ def apply_new_bombs(
         state.bombs.append(bomb)
         space.add_bomb(len(state.bombs) - 1, px, py)
         stats.bombs_in_use += 1
-        bomb_cells.add((col, row))
+        bomb_cells.add(Cell(col, row))
 
 
 def sync_pushed_bombs(state: GameState, space: PhysicsSpace) -> None:
@@ -97,7 +97,7 @@ def sync_pushed_bombs(state: GameState, space: PhysicsSpace) -> None:
         pos = space.get_bomb_position(i)
         if pos is None:
             continue
-        bx, by = pos
+        bx, by = pos.x, pos.y
         # If velocity is below threshold, snap to nearest cell centre
         speed = (bomb.vx ** 2 + bomb.vy ** 2) ** 0.5
         if speed < 5.0:

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import random
 
-from core.components import TileKind
+from core.components import Cell, TileKind
 from engine.config import (
     GRID_COLS,
     GRID_ROWS,
@@ -23,8 +23,8 @@ def generate_map(
     rows: int = GRID_ROWS,
     num_players: int = 4,
     seed: int | None = None,
-    spawn_points: list[tuple[int, int]] | None = None,
-    active_spawns: list[tuple[int, int]] | None = None,
+    spawn_points: list[Cell] | None = None,
+    active_spawns: list[Cell] | None = None,
 ) -> list[list[TileKind]]:
     """active_spawns, if given, is the exact list of spawn cells actually used
     this round (e.g. spawn_points[pid] for each real player_id) and is what
@@ -49,10 +49,10 @@ def generate_map(
 
     # 2-tile safety zones around each active spawn point
     safe: set[tuple[int, int]] = set()
-    for col, row in (active_spawns if active_spawns is not None else spawn_points[:num_players]):
+    for spawn in (active_spawns if active_spawns is not None else spawn_points[:num_players]):
         for dr in range(-2, 3):
             for dc in range(-2, 3):
-                safe.add((col + dc, row + dr))
+                safe.add((spawn.col + dc, spawn.row + dr))
 
     # Scatter soft blocks
     for row in range(rows):
@@ -67,12 +67,12 @@ def generate_map(
     return tiles
 
 
-def spawn_position_px(player_idx: int, spawn_points: list[tuple[int, int]] | None = None) -> tuple[float, float]:
+def spawn_position_px(player_idx: int, spawn_points: list[Cell] | None = None) -> tuple[float, float]:
     """Return pixel centre for spawn point at index player_idx."""
     from engine.config import TILE_SIZE
     spawn_points = spawn_points if spawn_points is not None else SPAWN_POINTS
-    col, row = spawn_points[player_idx]
-    return col * TILE_SIZE + TILE_SIZE / 2, row * TILE_SIZE + TILE_SIZE / 2
+    spawn = spawn_points[player_idx]
+    return spawn.col * TILE_SIZE + TILE_SIZE / 2, spawn.row * TILE_SIZE + TILE_SIZE / 2
 
 
 def _round_odd(x: float) -> int:
@@ -97,20 +97,20 @@ def _rescale_and_snap(base_v: int, base_dim: int, new_dim: int) -> int:
     return max(1, min(new_dim - 2, v))
 
 
-def _avoid_pillar(col: int, row: int) -> tuple[int, int]:
+def _avoid_pillar(col: int, row: int) -> Cell:
     if col % 2 == 0 and row % 2 == 0:
         row = row - 1 if row > 1 else row + 1
-    return col, row
+    return Cell(col, row)
 
 
-def spawn_points_for_grid(cols: int, rows: int) -> list[tuple[int, int]]:
+def spawn_points_for_grid(cols: int, rows: int) -> list[Cell]:
     """Rescale the hand-tuned baseline SPAWN_POINTS layout into an arbitrary
     (cols, rows) grid, keeping each point's relative corner/edge/ring position
     and nudging it off any pillar cell it would otherwise land on."""
     result = []
-    for base_col, base_row in SPAWN_POINTS:
-        col = _rescale_and_snap(base_col, _BASE_COLS, cols)
-        row = _rescale_and_snap(base_row, _BASE_ROWS, rows)
+    for base_spawn in SPAWN_POINTS:
+        col = _rescale_and_snap(base_spawn.col, _BASE_COLS, cols)
+        row = _rescale_and_snap(base_spawn.row, _BASE_ROWS, rows)
         result.append(_avoid_pillar(col, row))
     return result
 

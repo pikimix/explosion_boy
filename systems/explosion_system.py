@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import random
 from collections import deque
+from dataclasses import dataclass
 
 from core.components import (
+    Cell,
     ExplosionCenter,
     ExplosionRay,
     TileKind,
@@ -23,6 +25,17 @@ from systems.event_bus import (
 from systems.powerup_system import maybe_drop_powerup
 
 _DIRECTIONS = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+
+
+@dataclass(frozen=True)
+class ClusterOrigin:
+    """A cluster bomb's detonation point and the traits its sub-bombs inherit."""
+    col: int
+    row: int
+    blast_radius: int
+    blast_penetration: int
+    is_super: bool
+    is_rubble: bool
 
 
 def process_detonations(
@@ -54,9 +67,9 @@ def process_detonations(
     """
     queue: deque[DetonationEvent] = deque(detonations)
     processed_indices: set[int] = set()
-    cluster_origins: list[tuple[int, int, int, int, bool, bool]] = []
-    bomb_by_cell: dict[tuple[int, int], int] = {
-        (b.col, b.row): bi for bi, b in enumerate(state.bombs)
+    cluster_origins: list[ClusterOrigin] = []
+    bomb_by_cell: dict[Cell, int] = {
+        Cell(b.col, b.row): bi for bi, b in enumerate(state.bombs)
     }
 
     while queue:
@@ -103,7 +116,7 @@ def process_detonations(
                         continue  # penetrate through the now-empty block
 
                     # Check for chain-reacting bomb at this cell
-                    bi = bomb_by_cell.get((c, r))
+                    bi = bomb_by_cell.get(Cell(c, r))
                     if bi is not None and bi not in processed_indices:
                         bomb = state.bombs[bi]
                         queue.append(DetonationEvent(
@@ -127,9 +140,10 @@ def process_detonations(
                     ))
 
         if det.is_cluster:
-            cluster_origins.append((
-                det.col, det.row, det.blast_radius, det.blast_penetration,
-                det.is_super, det.is_rubble,
+            cluster_origins.append(ClusterOrigin(
+                col=det.col, row=det.row, blast_radius=det.blast_radius,
+                blast_penetration=det.blast_penetration,
+                is_super=det.is_super, is_rubble=det.is_rubble,
             ))
 
     remove_bombs(state, space, list(processed_indices))
@@ -143,7 +157,7 @@ def _super_bomb_explosion(
     space: PhysicsSpace,
     det: DetonationEvent,
     bus: EventBus,
-    bomb_by_cell: dict[tuple[int, int], int],
+    bomb_by_cell: dict[Cell, int],
     queue: deque[DetonationEvent],
     processed_indices: set[int],
 ) -> None:
@@ -161,7 +175,7 @@ def _super_bomb_explosion(
                 bus.emit(SoftBlockDestroyedEvent(c, r))
                 maybe_drop_powerup(state, c, r)
                 space.remove_wall(c, r)
-            bi = bomb_by_cell.get((c, r))
+            bi = bomb_by_cell.get(Cell(c, r))
             if bi is not None and bi not in processed_indices and bi != det.bomb_idx:
                 b = state.bombs[bi]
                 queue.append(DetonationEvent(
@@ -176,7 +190,7 @@ def _rubble_bomb_explosion(
     space: PhysicsSpace,
     det: DetonationEvent,
     bus: EventBus,
-    bomb_by_cell: dict[tuple[int, int], int],
+    bomb_by_cell: dict[Cell, int],
     queue: deque[DetonationEvent],
     processed_indices: set[int],
 ) -> None:
@@ -186,14 +200,14 @@ def _rubble_bomb_explosion(
     than halved, so collecting both upgrades the rubble bomb's reach.
     """
     half = det.blast_radius if det.is_super else max(2, det.blast_radius // 2)
-    affected: list[tuple[int, int]] = []
+    affected: list[Cell] = []
 
     for dr in range(-half, half + 1):
         for dc in range(-half, half + 1):
             c, r = det.col + dc, det.row + dr
             if not (0 <= r < state.map_rows and 0 <= c < state.map_cols):
                 continue
-            affected.append((c, r))
+            affected.append(Cell(c, r))
             state.explosions.append(ExplosionCenter(c, r, EXPLOSION_DURATION_TICKS))
             if state.tiles[r][c] == TileKind.SOFT_BLOCK:
                 state.tiles[r][c] = TileKind.EMPTY
@@ -201,7 +215,7 @@ def _rubble_bomb_explosion(
                 bus.emit(SoftBlockDestroyedEvent(c, r))
                 maybe_drop_powerup(state, c, r)
                 space.remove_wall(c, r)
-            bi = bomb_by_cell.get((c, r))
+            bi = bomb_by_cell.get(Cell(c, r))
             if bi is not None and bi not in processed_indices and bi != det.bomb_idx:
                 b = state.bombs[bi]
                 queue.append(DetonationEvent(
@@ -212,12 +226,13 @@ def _rubble_bomb_explosion(
 
     # Scatter new soft blocks on empty cells within the AOE (1-in-5 chance each)
     player_cells = {
-        (int(phys.x // TILE_SIZE), int(phys.y // TILE_SIZE))
+        Cell(int(phys.x // TILE_SIZE), int(phys.y // TILE_SIZE))
         for phys in state.player_physics.values()
     }
-    bomb_cells = {(b.col, b.row) for b in state.bombs}
-    for c, r in affected:
-        if state.tiles[r][c] == TileKind.EMPTY and (c, r) not in player_cells and (c, r) not in bomb_cells:
+    bomb_cells = {Cell(b.col, b.row) for b in state.bombs}
+    for cell in affected:
+        c, r = cell.col, cell.row
+        if state.tiles[r][c] == TileKind.EMPTY and cell not in player_cells and cell not in bomb_cells:
             if random.random() < 0.2:
                 state.tiles[r][c] = TileKind.SOFT_BLOCK
                 state.tiles_dirty = True
@@ -227,7 +242,7 @@ def _rubble_bomb_explosion(
 def _spawn_cluster_sub_bombs(
     state: GameState,
     space: PhysicsSpace,
-    origins: list[tuple[int, int, int, int, bool, bool]],
+    origins: list[ClusterOrigin],
 ) -> None:
     """Spawn up to 4 sub-bombs from each cluster origin; sub-bombs don't count toward cap.
 
@@ -238,33 +253,33 @@ def _spawn_cluster_sub_bombs(
     from core.components import BombComponent
     from systems.powerup_system import CLUSTER_SUB_FUSE_TICKS
 
-    for col, row, blast_radius, blast_penetration, is_super, is_rubble in origins:
-        bomb_cells = {(b.col, b.row) for b in state.bombs}
+    for origin in origins:
+        bomb_cells = {Cell(b.col, b.row) for b in state.bombs}
         for dc, dr in _DIRECTIONS:
             for dist in range(1, 4):
-                c, r = col + dc * dist, row + dr * dist
+                c, r = origin.col + dc * dist, origin.row + dr * dist
                 if not (0 <= r < state.map_rows and 0 <= c < state.map_cols):
                     break
                 if state.tiles[r][c] != TileKind.EMPTY:
                     break  # wall or soft block stops placement in this direction
                 if dist < 2:
                     continue  # walk through adjacent cell without placing
-                if (c, r) in bomb_cells:
+                if Cell(c, r) in bomb_cells:
                     continue  # cell occupied — try one step further
                 px = c * TILE_SIZE + TILE_SIZE / 2
                 py = r * TILE_SIZE + TILE_SIZE / 2
                 sub = BombComponent(
                     owner_id=-1,
                     fuse_ticks_remaining=CLUSTER_SUB_FUSE_TICKS,
-                    blast_radius=blast_radius,
+                    blast_radius=origin.blast_radius,
                     col=c, row=r, px=px, py=py,
-                    blast_penetration=blast_penetration,
-                    is_super=is_super,
-                    is_rubble=is_rubble,
+                    blast_penetration=origin.blast_penetration,
+                    is_super=origin.is_super,
+                    is_rubble=origin.is_rubble,
                 )
                 state.bombs.append(sub)
                 space.add_bomb(len(state.bombs) - 1, px, py)
-                bomb_cells.add((c, r))
+                bomb_cells.add(Cell(c, r))
                 break
 
 
@@ -286,16 +301,16 @@ def _tick_and_keep(obj) -> bool:
 
 
 def _kill_players_in_explosions(state: GameState, bus: EventBus) -> None:
-    lit: set[tuple[int, int]] = {(e.col, e.row) for e in state.explosions}
+    lit: set[Cell] = {Cell(e.col, e.row) for e in state.explosions}
     for ray in state.explosion_rays:
         dc, dr = ray.direction
         for i in range(1, ray.length + 1):
-            lit.add((ray.origin_col + dc * i, ray.origin_row + dr * i))
+            lit.add(Cell(ray.origin_col + dc * i, ray.origin_row + dr * i))
 
     dead: list[int] = []
     for pid, phys in state.player_physics.items():
-        col, row = px_to_grid(phys.x, phys.y)
-        if (col, row) not in lit:
+        cell = px_to_grid(phys.x, phys.y)
+        if cell not in lit:
             continue
         stats = state.players.get(pid)
         if stats is not None and stats.shield_invincibility_ticks > 0:

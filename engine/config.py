@@ -1,5 +1,7 @@
 """Game-wide constants: grid/window sizing, timing, physics tuning, and colours."""
 
+from core.components import Cell
+
 TILE_SIZE = 48          # pixels per tile
 GRID_COLS = 25          # fallback default only — real rounds size the grid via map_size_for_player_count
 GRID_ROWS = 25
@@ -46,11 +48,11 @@ PLAYER_DAMPING = 0.25           # pymunk body velocity damping factor
 
 # 16 spawn points on a 29×25 grid — ordered so N-player games use first N.
 # No spawn lands on a pillar (pillars are at even-col AND even-row).
-SPAWN_POINTS: list[tuple[int, int]] = [
-    (1,   1),  (27,  1),  (1,  23),  (27, 23),   # corners
-    (14,  1),  (14, 23),  (1,  12),  (27, 12),   # mid-edges
-    (7,   6),  (21,  6),  (7,  18),  (21, 18),   # inner ring 1
-    (7,  12),  (21, 12),  (14,  7),  (14, 17),   # inner ring 2
+SPAWN_POINTS: list[Cell] = [
+    Cell(1,   1),  Cell(27,  1),  Cell(1,  23),  Cell(27, 23),   # corners
+    Cell(14,  1),  Cell(14, 23),  Cell(1,  12),  Cell(27, 12),   # mid-edges
+    Cell(7,   6),  Cell(21,  6),  Cell(7,  18),  Cell(21, 18),   # inner ring 1
+    Cell(7,  12),  Cell(21, 12),  Cell(14,  7),  Cell(14, 17),   # inner ring 2
 ]
 
 # ── Rendering colours ─────────────────────────────────────────────────────────

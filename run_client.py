@@ -6,6 +6,7 @@ import arcade
 
 from app.scenes.lobby_scene import LobbyScene
 from app.scenes.state_machine import SceneManager
+from core.components import Colour
 from net.client import GameClient
 from engine.config import DEFAULT_PORT
 from engine.transport import make_client_transport
@@ -39,7 +40,7 @@ def main() -> None:
     client = GameClient(transport)
 
     colour_rgb = prefs['colour_rgb']
-    colour_tuple = tuple(colour_rgb) if colour_rgb is not None else None
+    colour = Colour(*colour_rgb) if colour_rgb is not None else None
 
     window = GameWindow()
     manager = SceneManager()
@@ -47,7 +48,7 @@ def main() -> None:
         client, args.name, manager,
         music_volume=prefs['music_volume'],
         sfx_volume=prefs['sfx_volume'],
-        colour_rgb=colour_tuple,
+        colour=colour,
         debug=args.debug,
     ))
     window.set_scene_manager(manager)

@@ -81,8 +81,8 @@ def process_powerup_pickups(state: GameState) -> None:
     to_remove: list[int] = []
     for i, pup in enumerate(state.powerups):
         for pid, phys in state.player_physics.items():
-            col, row = px_to_grid(phys.x, phys.y)
-            if col == pup.col and row == pup.row:
+            cell = px_to_grid(phys.x, phys.y)
+            if cell.col == pup.col and cell.row == pup.row:
                 _apply(state, pid, pup.kind)
                 to_remove.append(i)
                 break

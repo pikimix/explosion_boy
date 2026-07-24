@@ -38,10 +38,10 @@ def test_spawn_points_stay_in_bounds_and_off_pillars():
         cols, rows = map_size_for_player_count(n)
         points = spawn_points_for_grid(cols, rows)
         assert len(points) == 16
-        for col, row in points[:n]:
-            assert 1 <= col <= cols - 2
-            assert 1 <= row <= rows - 2
-            assert not (col % 2 == 0 and row % 2 == 0)
+        for point in points[:n]:
+            assert 1 <= point.col <= cols - 2
+            assert 1 <= point.row <= rows - 2
+            assert not (point.col % 2 == 0 and point.row % 2 == 0)
 
 
 def test_spawn_points_are_unique_for_active_players():
@@ -110,7 +110,8 @@ def test_soft_blocks_respect_safety_zone_for_the_exact_active_spawns():
         cols=cols, rows=rows, num_players=3, seed=11,
         spawn_points=spawn_points, active_spawns=active_spawns,
     )
-    for col, row in active_spawns:
+    for spawn in active_spawns:
+        col, row = spawn.col, spawn.row
         for dr in range(-2, 3):
             for dc in range(-2, 3):
                 c, r = col + dc, row + dr

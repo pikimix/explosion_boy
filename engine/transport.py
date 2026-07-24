@@ -45,6 +45,14 @@ class ReceiveEvent:
 TransportEvent = ConnectEvent | DisconnectEvent | ReceiveEvent
 
 
+@dataclass(frozen=True, slots=True)
+class Frame:
+    """One framed message extracted from a backend's receive buffer."""
+
+    channel: int
+    payload: bytes
+
+
 # ── Protocols (the engine contract) ───────────────────────────────────────────
 @runtime_checkable
 class ServerTransport(Protocol):

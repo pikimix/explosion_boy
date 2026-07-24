@@ -160,7 +160,7 @@ class GameServer:
             self._maybe_start_game()
 
         elif isinstance(msg, ColourMsg):
-            self._lobby.on_colour(peer_id, msg.colour_rgb)
+            self._lobby.on_colour(peer_id, msg.colour)
 
         elif isinstance(msg, RenameMsg):
             self._lobby.on_rename(peer_id, msg.new_name)

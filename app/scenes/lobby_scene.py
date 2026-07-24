@@ -11,7 +11,9 @@ import arcade.shape_list
 from PIL import Image
 
 from app.sound_system import SoundSystem
+from app.ui.geometry import Bounds
 from app.ui.hud import HUD_WIDTH
+from core.components import Cell, Colour
 from net.client import GameClient
 from net.protocol import GameStartMsg, LobbyUpdateMsg
 from engine import user_prefs
@@ -51,7 +53,7 @@ class LobbyScene:
                  scene_manager: 'SceneManager',  # type: ignore[name-defined]
                  music_volume: float = 1.0,
                  sfx_volume: float = 1.0,
-                 colour_rgb: tuple[int, int, int] | None = None,
+                 colour: Colour | None = None,
                  debug: bool = False) -> None:
         self._client = client
         self._scene_manager = scene_manager
@@ -65,10 +67,10 @@ class LobbyScene:
         self._spawn_texts: list[arcade.Text] = []
 
         # Colour picker state
-        self._colour_rgb: tuple[int, int, int] = colour_rgb if colour_rgb is not None else (220, 50, 50)
-        self._colour_initialised = colour_rgb is not None
+        self._colour: Colour = colour if colour is not None else Colour(220, 50, 50)
+        self._colour_initialised = colour is not None
         self._colour_sent = False  # whether we've pushed colour to server this session
-        rv, gv, bv = (c / 255.0 for c in self._colour_rgb)
+        rv, gv, bv = (c / 255.0 for c in self._colour.as_tuple())
         self._hue, self._saturation, self._value = colorsys.rgb_to_hsv(rv, gv, bv)
         r = _WHEEL_SIZE / 2
         self._wheel_sel_dx = math.cos(2 * math.pi * self._hue) * r * self._saturation
@@ -76,7 +78,7 @@ class LobbyScene:
         self._picker_open = False
         self._wheel_texture: arcade.Texture | None = None
 
-        self._spawn_points: list[tuple[int, int]] = []
+        self._spawn_points: list[Cell] = []
         self._map_w = WINDOW_W
         self._map_h = WINDOW_H
         self._camera = self._make_camera(WINDOW_W, WINDOW_H)
@@ -184,7 +186,7 @@ class LobbyScene:
 
     def _update_colour_from_hsv(self) -> None:
         rv, gv, bv = colorsys.hsv_to_rgb(self._hue, self._saturation, self._value)
-        self._colour_rgb = (int(rv * 255), int(gv * 255), int(bv * 255))
+        self._colour = Colour(int(rv * 255), int(gv * 255), int(bv * 255))
 
     def _wheel_coords(self, win: arcade.Window) -> tuple[float, float]:
         popup_cx = win.width / 2
@@ -193,14 +195,14 @@ class LobbyScene:
         wheel_cy = popup_cy + 25
         return wheel_cx, wheel_cy
 
-    def _slider_bounds(self, win: arcade.Window) -> tuple[float, float, float, float]:
-        """Return (left, right, bottom, top) for the brightness slider."""
+    def _slider_bounds(self, win: arcade.Window) -> Bounds:
+        """Return the bounds of the brightness slider."""
         _, wheel_cy = self._wheel_coords(win)
         slider_left = win.width / 2 - _WHEEL_SIZE / 2
         slider_right = slider_left + _WHEEL_SIZE
         slider_bottom = wheel_cy - _WHEEL_SIZE / 2 - 24
         slider_top = slider_bottom + _SLIDER_H
-        return slider_left, slider_right, slider_bottom, slider_top
+        return Bounds(slider_left, slider_right, slider_bottom, slider_top)
 
     def on_mouse_press(self, x: float, y: float, button: int, modifiers: int) -> None:
         """Handle a left click on the colour picker, name input box, or colour swatch.
@@ -278,17 +280,17 @@ class LobbyScene:
             self._hue = (math.atan2(-dy, dx) / (2 * math.pi)) % 1.0
             self._saturation = min(dist / (_WHEEL_SIZE / 2), 1.0)
             self._update_colour_from_hsv()
-            self._client.send_colour(self._colour_rgb)
-            user_prefs.set_pref('colour_rgb', list(self._colour_rgb))
+            self._client.send_colour(self._colour)
+            user_prefs.set_pref('colour_rgb', list(self._colour.as_tuple()))
             return True
 
         # Slider → update brightness
-        sl, sr, sb, st = self._slider_bounds(win)
-        if sl <= x <= sr and sb <= y <= st:
-            self._value = max(0.0, min(1.0, (x - sl) / (sr - sl)))
+        slider = self._slider_bounds(win)
+        if slider.left <= x <= slider.right and slider.bottom <= y <= slider.top:
+            self._value = max(0.0, min(1.0, (x - slider.left) / (slider.right - slider.left)))
             self._update_colour_from_hsv()
-            self._client.send_colour(self._colour_rgb)
-            user_prefs.set_pref('colour_rgb', list(self._colour_rgb))
+            self._client.send_colour(self._colour)
+            user_prefs.set_pref('colour_rgb', list(self._colour.as_tuple()))
             return True
 
         return False
@@ -359,15 +361,15 @@ class LobbyScene:
                 if self._client.player_id is not None and not self._colour_initialised:
                     pid = self._client.player_id
                     initial = PLAYER_COLOURS[pid % len(PLAYER_COLOURS)]
-                    self._colour_rgb = initial[:3]
-                    rv, gv, bv = (c / 255.0 for c in self._colour_rgb)
+                    self._colour = Colour(*initial[:3])
+                    rv, gv, bv = (c / 255.0 for c in self._colour.as_tuple())
                     self._hue, self._saturation, self._value = colorsys.rgb_to_hsv(rv, gv, bv)
                     r = _WHEEL_SIZE / 2
                     self._wheel_sel_dx = math.cos(2 * math.pi * self._hue) * r * self._saturation
                     self._wheel_sel_dy = -math.sin(2 * math.pi * self._hue) * r * self._saturation
                     self._colour_initialised = True
                 if self._client.player_id is not None and not self._colour_sent:
-                    self._client.send_colour(self._colour_rgb)
+                    self._client.send_colour(self._colour)
                     self._colour_sent = True
                 self._rebuild_spawn_markers()
             elif isinstance(msg, GameStartMsg):
@@ -377,7 +379,7 @@ class LobbyScene:
                     GameScene(self._client, self._scene_manager, self._player_name,
                               music_volume=self._sounds.music_volume,
                               sfx_volume=self._sounds.sfx_volume,
-                              colour_rgb=self._colour_rgb,
+                              colour=self._colour,
                               debug=self._debug, start_state=msg.get_state())
                 )
                 return
@@ -465,13 +467,13 @@ class LobbyScene:
         self._your_colour_text.draw()
         arcade.draw_rect_filled(
             arcade.XYWH(swatch_cx, 130, swatch_w, 24),
-            (*self._colour_rgb, 255),
+            (*self._colour.as_tuple(), 255),
         )
         arcade.draw_rect_outline(
             arcade.XYWH(swatch_cx, 130, swatch_w, 24),
             (255, 255, 255, 120), 1,
         )
-        brightness = sum(self._colour_rgb) / (255 * 3)
+        brightness = sum(self._colour.as_tuple()) / (255 * 3)
         self._swatch_label_text.color = (0, 0, 0, 160) if brightness > 0.5 else (255, 255, 255, 160)
         self._swatch_label_text.draw()
 
@@ -520,30 +522,30 @@ class LobbyScene:
         arcade.draw_circle_outline(sel_x, sel_y, 7, (255, 255, 255, 220), 1)
 
         # Brightness slider (black → full hue/sat colour)
-        sl, sr, sb, st = self._slider_bounds(win)
-        slider_cx = (sl + sr) / 2
-        slider_cy = (sb + st) / 2
-        seg_w = (sr - sl) / _SLIDER_SEGMENTS
+        slider = self._slider_bounds(win)
+        slider_cx = (slider.left + slider.right) / 2
+        slider_cy = (slider.bottom + slider.top) / 2
+        seg_w = (slider.right - slider.left) / _SLIDER_SEGMENTS
         for i in range(_SLIDER_SEGMENTS):
             t = i / (_SLIDER_SEGMENTS - 1)
             rv, gv, bv = colorsys.hsv_to_rgb(self._hue, self._saturation, t)
-            seg_cx = sl + (i + 0.5) * seg_w
+            seg_cx = slider.left + (i + 0.5) * seg_w
             arcade.draw_rect_filled(
                 arcade.XYWH(seg_cx, slider_cy, seg_w + 0.5, _SLIDER_H),
                 (int(rv * 255), int(gv * 255), int(bv * 255), 255),
             )
         arcade.draw_rect_outline(
-            arcade.XYWH(slider_cx, slider_cy, sr - sl, _SLIDER_H),
+            arcade.XYWH(slider_cx, slider_cy, slider.right - slider.left, _SLIDER_H),
             (140, 140, 140, 180), 1,
         )
         # Slider thumb
-        thumb_x = sl + self._value * (sr - sl)
+        thumb_x = slider.left + self._value * (slider.right - slider.left)
         arcade.draw_rect_filled(
             arcade.XYWH(thumb_x, slider_cy, 3, _SLIDER_H + 8),
             (255, 255, 255, 230),
         )
-        self._picker_brightness_text.x = sl
-        self._picker_brightness_text.y = sb - 4
+        self._picker_brightness_text.x = slider.left
+        self._picker_brightness_text.y = slider.bottom - 4
         self._picker_brightness_text.draw()
 
         self._picker_close_text.x = popup_cx
@@ -631,7 +633,7 @@ class LobbyScene:
         texts = []
         for p in self._players:
             pid = p['id']
-            col, row = self._spawn_points[pid]
+            col, row = self._spawn_points[pid].col, self._spawn_points[pid].row
             px = col * TILE_SIZE + TILE_SIZE / 2
             py = row * TILE_SIZE + TILE_SIZE / 2
             colour_rgb = tuple(p.get('colour_rgb', PLAYER_COLOURS[pid % len(PLAYER_COLOURS)][:3]))

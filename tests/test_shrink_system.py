@@ -30,7 +30,7 @@ def _make_round(num_players: int, seed: int = 1) -> tuple[GameState, PhysicsSpac
     )
     for pid in range(num_players):
         state.players[pid] = PlayerStats(player_id=pid)
-        px, py = _grid_centre(*spawn_points[pid])
+        px, py = _grid_centre(spawn_points[pid].col, spawn_points[pid].row)
         state.player_physics[pid] = PhysicsState(px, py)
 
     space = PhysicsSpace()

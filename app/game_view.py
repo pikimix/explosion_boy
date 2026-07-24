@@ -22,7 +22,7 @@ from core.components import PowerupKind, TileKind
 from core.state import GameState
 from engine.config import (
     BOMB_FUSE_TICKS, BOMB_PULSE_COLOUR, EMPTY_TILE_COLOUR,
-    EXPLOSION_COLOUR, GRID_COLS, GRID_ROWS, PLAYER_COLOURS, POWERUP_COLOURS,
+    EXPLOSION_COLOUR, GRID_COLS, GRID_ROWS, POWERUP_COLOURS,
     POWERUP_SYMBOLS, SHRINK_WARN_TICKS, SOFT_BLOCK_COLOUR, SOLID_WALL_COLOUR,
     TILE_SIZE, WINDOW_H, WINDOW_W,
 )
@@ -317,8 +317,7 @@ class GameView:
             sprite = self._player_sprites[pid]
             sprite.center_x = pred_x if (pid == local_id and pred_x is not None) else phys.x
             sprite.center_y = pred_y if (pid == local_id and pred_y is not None) else phys.y
-            rgb = state.player_colours.get(pid, PLAYER_COLOURS[pid % len(PLAYER_COLOURS)][:3])
-            sprite.color = (*rgb, 255)
+            sprite.color = (*hud.player_rgb(state, pid), 255)
 
             if pid == local_id and pred_vx is not None and pred_vy is not None:
                 vx, vy = pred_vx, pred_vy

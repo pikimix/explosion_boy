@@ -8,6 +8,26 @@ import arcade
 from core.state import GameState
 from engine.config import PLAYER_COLOURS, POWERUP_COLOURS, POWERUP_SYMBOLS
 
+def player_rgb(state: GameState, pid: int) -> tuple[int, int, int]:
+    """Resolve the RGB colour to render a player with.
+
+    Parameters
+    ----------
+    state : GameState
+        Current game state; consulted for the player's chosen colour.
+    pid : int
+        Player id to resolve a colour for.
+
+    Returns
+    -------
+    tuple[int, int, int]
+        The player's chosen colour, or a deterministic fallback derived
+        from `PLAYER_COLOURS` if the player hasn't chosen one.
+    """
+    colour = state.player_colours.get(pid)
+    return colour.as_tuple() if colour is not None else PLAYER_COLOURS[pid % len(PLAYER_COLOURS)][:3]
+
+
 HUD_WIDTH = 180.0
 _X = 10.0
 _TOP_MARGIN = 10.0
@@ -128,12 +148,12 @@ def draw(state: GameState) -> None:
             _player_huds[pid] = _make_player_hud(pid)
         hud = _player_huds[pid]
 
-        colour = state.player_colours.get(pid, PLAYER_COLOURS[pid % len(PLAYER_COLOURS)][:3])
+        rgb = player_rgb(state, pid)
         name = state.player_names.get(pid, f'P{pid + 1}')
 
         # Name row
         hud.name.text = name
-        hud.name.color = (*colour[:3], 255)
+        hud.name.color = (*rgb, 255)
         hud.name.y = y
         hud.name.draw()
         y -= _NAME_H

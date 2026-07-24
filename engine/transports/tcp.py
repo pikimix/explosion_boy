@@ -20,6 +20,7 @@ from engine.transport import (
     CHANNEL_RELIABLE,
     ConnectEvent,
     DisconnectEvent,
+    Frame,
     ReceiveEvent,
     TransportEvent,
 )
@@ -47,17 +48,16 @@ class _RecvBuffer:
         """
         self._buf.extend(chunk)
 
-    def messages(self) -> list[tuple[int, bytes]]:
+    def messages(self) -> list[Frame]:
         """Extract all complete messages currently available in the buffer.
 
         Returns
         -------
-        list of tuple of (int, bytes)
-            Each tuple is a decoded ``(channel, payload)`` pair for a
-            fully-received frame. Consumed bytes are removed from the
-            internal buffer.
+        list[Frame]
+            One frame per fully-received message. Consumed bytes are
+            removed from the internal buffer.
         """
-        out: list[tuple[int, bytes]] = []
+        out: list[Frame] = []
         while len(self._buf) >= _HEADER.size:
             length, channel = _HEADER.unpack_from(self._buf)
             total = _HEADER.size + length
@@ -65,7 +65,7 @@ class _RecvBuffer:
                 break
             payload = bytes(self._buf[_HEADER.size:total])
             del self._buf[:total]
-            out.append((channel, payload))
+            out.append(Frame(channel, payload))
         return out
 
 
@@ -106,7 +106,7 @@ class _Peer:
                 return False
         return True
 
-    def read(self) -> list[tuple[int, bytes]] | None:
+    def read(self) -> list[Frame] | None:
         """Non-blocking read. Returns parsed messages, or None on disconnect."""
         try:
             chunk = self.sock.recv(65536)
@@ -257,8 +257,8 @@ class TCPServerTransport:
         if messages is None:
             self._drop(peer.peer_id, events)
             return
-        for channel, data in messages:
-            events.append(ReceiveEvent(peer.peer_id, channel, data))
+        for frame in messages:
+            events.append(ReceiveEvent(peer.peer_id, frame.channel, frame.payload))
 
     def _drop(self, peer_id: UUID, events: list[TransportEvent]) -> None:
         peer = self._peers.pop(peer_id, None)
@@ -352,8 +352,8 @@ class TCPClientTransport:
                 self._connected = False
                 events.append(DisconnectEvent(self._peer.peer_id))
                 return events
-            for channel, data in messages:
-                events.append(ReceiveEvent(self._peer.peer_id, channel, data))
+            for frame in messages:
+                events.append(ReceiveEvent(self._peer.peer_id, frame.channel, frame.payload))
 
         if not self._peer.flush():
             self._connected = False

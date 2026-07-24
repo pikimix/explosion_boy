@@ -32,6 +32,7 @@ from engine.transport import (
     CHANNEL_UNRELIABLE,
     ConnectEvent,
     DisconnectEvent,
+    Frame,
     ReceiveEvent,
     TransportEvent,
 )
@@ -59,17 +60,17 @@ class _RecvBuffer:
         """Append a raw chunk of bytes received from the socket to the buffer."""
         self._buf.extend(chunk)
 
-    def messages(self) -> list[tuple[int, bytes]]:
+    def messages(self) -> list[Frame]:
         """Extract and return all complete framed messages currently buffered.
 
         Returns
         -------
-        list[tuple[int, bytes]]
-            One ``(channel, payload)`` pair per complete frame found in the
-            buffer, in arrival order. Any trailing partial frame is left
-            in the buffer for the next call.
+        list[Frame]
+            One frame per complete message found in the buffer, in arrival
+            order. Any trailing partial frame is left in the buffer for the
+            next call.
         """
-        out: list[tuple[int, bytes]] = []
+        out: list[Frame] = []
         while len(self._buf) >= _TCP_HEADER.size:
             length, channel = _TCP_HEADER.unpack_from(self._buf)
             total = _TCP_HEADER.size + length
@@ -77,7 +78,7 @@ class _RecvBuffer:
                 break
             payload = bytes(self._buf[_TCP_HEADER.size:total])
             del self._buf[:total]
-            out.append((channel, payload))
+            out.append(Frame(channel, payload))
         return out
 
 
@@ -119,7 +120,7 @@ class _TcpPeer:
                 return False
         return True
 
-    def read(self) -> list[tuple[int, bytes]] | None:
+    def read(self) -> list[Frame] | None:
         """Non-blocking TCP read. Returns parsed messages, or None on disconnect."""
         try:
             chunk = self.sock.recv(65536)
@@ -311,9 +312,9 @@ class DualServerTransport:
         if messages is None:
             self._drop(peer.peer_id, events)
             return
-        for channel, data in messages:
-            if channel != _CHANNEL_UDP_TOKEN:
-                events.append(ReceiveEvent(peer.peer_id, channel, data))
+        for frame in messages:
+            if frame.channel != _CHANNEL_UDP_TOKEN:
+                events.append(ReceiveEvent(peer.peer_id, frame.channel, frame.payload))
 
     def _recv_udp(self, events: list[TransportEvent]) -> None:
         try:
@@ -541,16 +542,16 @@ class DualClientTransport:
             events.append(DisconnectEvent(self._local_id))
             return
         self._tcp_recv_buf.feed(chunk)
-        for channel, data in self._tcp_recv_buf.messages():
-            if channel == _CHANNEL_UDP_TOKEN and len(data) == 16:
+        for frame in self._tcp_recv_buf.messages():
+            if frame.channel == _CHANNEL_UDP_TOKEN and len(frame.payload) == 16:
                 # Server assigned our UUID — register UDP endpoint with server
-                self._peer_uuid = UUID(bytes=data)
+                self._peer_uuid = UUID(bytes=frame.payload)
                 try:
-                    self._udp_sock.sendto(data, (self._host, self._port))
+                    self._udp_sock.sendto(frame.payload, (self._host, self._port))
                 except OSError:
                     pass
             else:
-                events.append(ReceiveEvent(self._local_id, channel, data))
+                events.append(ReceiveEvent(self._local_id, frame.channel, frame.payload))
 
     def _recv_udp(self, events: list[TransportEvent]) -> None:
         try:

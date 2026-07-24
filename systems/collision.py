@@ -1,12 +1,12 @@
 """Pure occupancy query functions over GameState. No mutations."""
 from __future__ import annotations
 
-from core.components import PowerupComponent, TileKind
+from core.components import Cell, PowerupComponent, TileKind
 from core.state import GameState
 from engine.config import TILE_SIZE
 
 
-def px_to_grid(px: float, py: float) -> tuple[int, int]:
+def px_to_grid(px: float, py: float) -> Cell:
     """Convert pixel coordinates to grid column/row indices.
 
     Parameters
@@ -18,10 +18,10 @@ def px_to_grid(px: float, py: float) -> tuple[int, int]:
 
     Returns
     -------
-    tuple[int, int]
-        The ``(col, row)`` grid indices containing the given pixel position.
+    Cell
+        The grid cell containing the given pixel position.
     """
-    return int(px // TILE_SIZE), int(py // TILE_SIZE)
+    return Cell(int(px // TILE_SIZE), int(py // TILE_SIZE))
 
 
 def cell_is_passable(state: GameState, col: int, row: int) -> bool:
@@ -133,8 +133,8 @@ def players_at(state: GameState, col: int, row: int) -> list[int]:
     """
     result = []
     for pid, phys in state.player_physics.items():
-        pcol, prow = px_to_grid(phys.x, phys.y)
-        if pcol == col and prow == row:
+        pcell = px_to_grid(phys.x, phys.y)
+        if pcell.col == col and pcell.row == row:
             result.append(pid)
     return result
 

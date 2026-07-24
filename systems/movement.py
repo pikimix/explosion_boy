@@ -67,15 +67,15 @@ def process_movement(
             continue
         vel = space.get_player_velocity(pid)
         if pid in state.player_physics:
-            state.player_physics[pid].x = pos[0]
-            state.player_physics[pid].y = pos[1]
-            state.player_physics[pid].vx = vel[0]
-            state.player_physics[pid].vy = vel[1]
+            state.player_physics[pid].x = pos.x
+            state.player_physics[pid].y = pos.y
+            state.player_physics[pid].vx = vel.vx
+            state.player_physics[pid].vy = vel.vy
         else:
-            state.player_physics[pid] = PhysicsState(pos[0], pos[1], vel[0], vel[1])
+            state.player_physics[pid] = PhysicsState(pos.x, pos.y, vel.vx, vel.vy)
 
     # Sync bomb physics positions back to state
     for i, bomb in enumerate(state.bombs):
         pos = space.get_bomb_position(i)
         if pos:
-            bomb.px, bomb.py = pos
+            bomb.px, bomb.py = pos.x, pos.y

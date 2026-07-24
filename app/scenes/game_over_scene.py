@@ -4,6 +4,7 @@ from __future__ import annotations
 import arcade
 import arcade.gui
 
+from core.components import Colour
 from net.protocol import GameOverMsg
 
 
@@ -16,7 +17,7 @@ class GameOverScene:
                  player_name: str = "Player",
                  music_volume: float = 1.0,
                  sfx_volume: float = 1.0,
-                 colour_rgb: tuple[int, int, int] = (220, 50, 50),
+                 colour: Colour = Colour(220, 50, 50),
                  debug: bool = False,
                  background_texture: arcade.Texture | None = None) -> None:
         self._scene_manager = scene_manager
@@ -25,7 +26,7 @@ class GameOverScene:
         self._player_name = player_name
         self._music_volume = music_volume
         self._sfx_volume = sfx_volume
-        self._colour_rgb = colour_rgb
+        self._colour = colour
         self._debug = debug
         self._background_texture = background_texture
 
@@ -76,7 +77,7 @@ class GameOverScene:
         self._scene_manager.replace(
             LobbyScene(self._client, self._player_name, self._scene_manager,
                        music_volume=self._music_volume, sfx_volume=self._sfx_volume,
-                       colour_rgb=self._colour_rgb, debug=self._debug)
+                       colour=self._colour, debug=self._debug)
         )
 
     def _on_quit(self, _event) -> None:

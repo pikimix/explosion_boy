@@ -7,7 +7,7 @@ from pathlib import Path
 import arcade
 import pyglet.media
 
-from core.components import PowerupKind
+from core.components import Cell, PowerupKind
 from core.state import GameState
 from systems.collision import px_to_grid
 
@@ -191,8 +191,8 @@ class SoundSystem:
         if phys is None:
             return
         player_pos = px_to_grid(phys.x, phys.y)
-        prev_by_pos = {(p.col, p.row): p.kind for p in prev.powerups}
-        curr_positions = {(p.col, p.row) for p in curr.powerups}
+        prev_by_pos = {Cell(p.col, p.row): p.kind for p in prev.powerups}
+        curr_positions = {Cell(p.col, p.row) for p in curr.powerups}
         for pos, kind in prev_by_pos.items():
             if pos not in curr_positions and pos == player_pos:
                 sound = self._pickups.get(kind)

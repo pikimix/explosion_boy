@@ -67,7 +67,7 @@ def test_build_initial_state_protects_spawns_with_non_contiguous_player_ids():
     cols, rows = map_size_for_player_count(3)
     spawn_points = spawn_points_for_grid(cols, rows)
     for pid in (0, 2, 3):
-        col, row = spawn_points[pid]
+        col, row = spawn_points[pid].col, spawn_points[pid].row
         for dr in range(-2, 3):
             for dc in range(-2, 3):
                 c, r = col + dc, row + dr

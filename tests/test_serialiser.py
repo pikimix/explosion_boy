@@ -1,5 +1,6 @@
 """Tests for GameState encode/decode round-tripping in core/serialiser.py."""
 
+from core.components import Colour
 from core.serialiser import decode_state, encode_state
 from core.state import GameState
 
@@ -33,3 +34,13 @@ def test_shrink_fields_default_when_absent_from_older_payload():
     assert decoded.starting_player_count == 0
     assert decoded.shrink_active is False
     assert decoded.shrink_stopped is False
+
+
+def test_player_colours_round_trip_as_colour_instances():
+    """Verify player_colours survives encode/decode as Colour instances, not plain tuples."""
+    state = GameState(tick=1, map_cols=3, map_rows=3, tiles=[[0, 0, 0]] * 3)
+    state.player_colours[0] = Colour(220, 50, 10)
+
+    decoded = decode_state(encode_state(state))
+
+    assert decoded.player_colours[0] == Colour(220, 50, 10)

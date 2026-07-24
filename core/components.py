@@ -34,6 +34,45 @@ class PowerupKind(IntEnum):
     BLAST_PENETRATION     = 11  # how many soft blocks one arm can punch through
 
 
+@dataclass(frozen=True)
+class Cell:
+    """A grid cell position, usable as a dict/set key."""
+    col: int
+    row: int
+
+
+@dataclass(frozen=True)
+class Colour:
+    """An RGB colour, e.g. a player's chosen colour."""
+    r: int
+    g: int
+    b: int
+
+    def as_tuple(self) -> tuple[int, int, int]:
+        """Return the ``(r, g, b)`` tuple form, e.g. for arcade draw calls or msgpack.
+
+        Returns
+        -------
+        tuple[int, int, int]
+            The colour as a plain ``(r, g, b)`` tuple.
+        """
+        return self.r, self.g, self.b
+
+
+@dataclass(frozen=True)
+class Position:
+    """A physics body's position, in pixels."""
+    x: float
+    y: float
+
+
+@dataclass(frozen=True)
+class Velocity:
+    """A physics body's velocity, in pixels per second."""
+    vx: float
+    vy: float
+
+
 @dataclass
 class PhysicsState:
     """Server-authoritative continuous position and velocity (pixels)."""

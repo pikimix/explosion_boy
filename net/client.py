@@ -16,6 +16,7 @@ from __future__ import annotations
 import threading
 from collections import deque
 
+from core.components import Colour
 from core.state import GameState
 from net.protocol import (
     AnyMsg,
@@ -139,15 +140,15 @@ class GameClient:
         """
         self._transport.send(ReadyMsg(ready=ready).encode(), CHANNEL_RELIABLE)
 
-    def send_colour(self, colour_rgb: tuple[int, int, int]) -> None:
+    def send_colour(self, colour: Colour) -> None:
         """Send the player's chosen colour to the server.
 
         Parameters
         ----------
-        colour_rgb : tuple[int, int, int]
-            The chosen colour as an (R, G, B) tuple.
+        colour : Colour
+            The chosen colour.
         """
-        self._transport.send(ColourMsg(colour_rgb=colour_rgb).encode(), CHANNEL_RELIABLE)
+        self._transport.send(ColourMsg(colour=colour).encode(), CHANNEL_RELIABLE)
 
     def send_rename(self, new_name: str) -> None:
         """Record the player's new name and send a rename request to the server.

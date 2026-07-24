@@ -93,7 +93,7 @@ class PredictionEngine:
 
         pos = self._space.get_player_position(self._pid)
         if pos:
-            replayed_x, replayed_y = pos
+            replayed_x, replayed_y = pos.x, pos.y
             dx = replayed_x - prev_x
             dy = replayed_y - prev_y
             if (dx * dx + dy * dy) ** 0.5 < _SNAP_THRESHOLD:
@@ -122,14 +122,12 @@ class PredictionEngine:
     @property
     def predicted_vx(self) -> float:
         """Return the player's current predicted x velocity."""
-        vx, _ = self._space.get_player_velocity(self._pid)
-        return vx
+        return self._space.get_player_velocity(self._pid).vx
 
     @property
     def predicted_vy(self) -> float:
         """Return the player's current predicted y velocity."""
-        _, vy = self._space.get_player_velocity(self._pid)
-        return vy
+        return self._space.get_player_velocity(self._pid).vy
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
@@ -180,4 +178,4 @@ class PredictionEngine:
         self._space.step(self._tick_dt)
         pos = self._space.get_player_position(self._pid)
         if pos:
-            self._predicted_x, self._predicted_y = pos
+            self._predicted_x, self._predicted_y = pos.x, pos.y

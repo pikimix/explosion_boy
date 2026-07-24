@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
-from core.components import GamePhase, PlayerStats, PhysicsState
+from core.components import Colour, GamePhase, PlayerStats, PhysicsState
 from core.serialiser import encode_state
 from core.state import GameState
 from net.protocol import (
@@ -28,7 +28,7 @@ class _LobbyPlayer:
     player_id: int
     name: str
     ready: bool = False
-    colour_rgb: tuple[int, int, int] = (220, 50, 50)
+    colour: Colour = Colour(220, 50, 50)
 
 
 class LobbyManager:
@@ -66,8 +66,8 @@ class LobbyManager:
             return
         used = {p.player_id for p in self._players.values()}
         pid = next(i for i in range(MAX_PLAYERS) if i not in used)
-        initial_colour = PLAYER_COLOURS[pid % len(PLAYER_COLOURS)][:3]
-        self._players[peer_id] = _LobbyPlayer(peer_id, pid, name, colour_rgb=initial_colour)
+        initial_colour = Colour(*PLAYER_COLOURS[pid % len(PLAYER_COLOURS)][:3])
+        self._players[peer_id] = _LobbyPlayer(peer_id, pid, name, colour=initial_colour)
         self._transport.send(
             peer_id,
             WelcomeMsg(assigned_player_id=pid, tick_rate=self._tick_rate).encode(),
@@ -89,18 +89,18 @@ class LobbyManager:
             player.ready = ready
             self._broadcast_lobby()
 
-    def on_colour(self, peer_id: UUID, colour_rgb: tuple[int, int, int]) -> None:
+    def on_colour(self, peer_id: UUID, colour: Colour) -> None:
         """Update a player's chosen colour and broadcast the lobby.
 
         Parameters
         ----------
         peer_id : UUID
             Identifier of the peer whose colour changed.
-        colour_rgb : tuple[int, int, int]
-            New colour as an (r, g, b) tuple.
+        colour : Colour
+            The player's newly chosen colour.
         """
         if player := self._players.get(peer_id):
-            player.colour_rgb = colour_rgb
+            player.colour = colour
             self._broadcast_lobby()
 
     def on_rename(self, peer_id: UUID, new_name: str) -> None:
@@ -201,7 +201,7 @@ class LobbyManager:
             px, py = spawn_position_px(lp.player_id, spawn_points)
             state.player_physics[lp.player_id] = PhysicsState(px, py)
             state.player_names[lp.player_id] = lp.name
-            state.player_colours[lp.player_id] = lp.colour_rgb
+            state.player_colours[lp.player_id] = lp.colour
         return state
 
     def broadcast_game_start(self, state: GameState) -> None:
@@ -259,7 +259,7 @@ class LobbyManager:
     def _broadcast_lobby(self) -> None:
         players_list = [
             {"id": lp.player_id, "name": lp.name, "ready": lp.ready,
-             "colour_rgb": list(lp.colour_rgb)}
+             "colour_rgb": list(lp.colour.as_tuple())}
             for lp in self._players.values()
         ]
         msg = LobbyUpdateMsg(players=players_list).encode()
