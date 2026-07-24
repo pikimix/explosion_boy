@@ -17,6 +17,8 @@ from core.components import (
 
 @dataclass
 class GameState:
+    """Canonical, fully serialisable snapshot of the world at a given tick."""
+
     tick: int
     map_cols: int
     map_rows: int
@@ -38,6 +40,18 @@ class GameState:
 
     phase: GamePhase = GamePhase.LOBBY
     winner_id: int | None = None
+
+    # Set once at round start; used to guard the "2 players remaining" shrink
+    # trigger so a round that *starts* with 2 players doesn't shrink instantly.
+    starting_player_count: int = 0
+
+    # Perimeter shrink progress
+    shrink_active: bool = False
+    shrink_ring: int = 0                  # last CLOSED ring index (0 = none closed yet)
+    shrink_warn_ring: int = 0             # ring currently flashing/warning, 0 = none pending
+    shrink_warn_ticks_remaining: int = 0  # counts down like BombComponent.fuse_ticks_remaining
+    shrink_next_warn_tick: int = 0        # tick the next ring's warning phase begins
+    shrink_stopped: bool = False
 
     # Incremented server-side whenever tiles change; serialised so the client
     # can skip the expensive ShapeElementList rebuild when nothing changed.

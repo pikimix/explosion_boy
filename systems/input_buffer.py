@@ -5,24 +5,47 @@ from collections import deque
 from datetime import datetime
 
 from core.components import PlayerInput, neutral_input
+from core.tick import TickNumber
 
 
 def _ts() -> str:
     return datetime.now().strftime('%H:%M:%S.%f')[:-3]
-from core.tick import TickNumber
 
 
 class InputBuffer:
+    """Buffer per-player inputs so the server can drain one per tick."""
+
     def __init__(self) -> None:
         self._queues: dict[int, deque[PlayerInput]] = {}
 
     def register_player(self, player_id: int) -> None:
+        """Create an empty input queue for a newly joined player.
+
+        Parameters
+        ----------
+        player_id : int
+            ID of the player to register.
+        """
         self._queues[player_id] = deque()
 
     def unregister_player(self, player_id: int) -> None:
+        """Remove a player's input queue, e.g. on disconnect.
+
+        Parameters
+        ----------
+        player_id : int
+            ID of the player to unregister.
+        """
         self._queues.pop(player_id, None)
 
     def push(self, inp: PlayerInput) -> None:
+        """Queue an input for its player, if that player is registered.
+
+        Parameters
+        ----------
+        inp : PlayerInput
+            Input to enqueue, appended to its player's queue.
+        """
         queue = self._queues.get(inp.player_id)
         if queue is not None:
             queue.append(inp)

@@ -23,8 +23,10 @@ from core.state import GameState
 from engine.config import (
     BOMB_FUSE_TICKS, BOMB_PULSE_COLOUR, EMPTY_TILE_COLOUR,
     EXPLOSION_COLOUR, GRID_COLS, GRID_ROWS, PLAYER_COLOURS, POWERUP_COLOURS,
-    POWERUP_SYMBOLS, SOFT_BLOCK_COLOUR, SOLID_WALL_COLOUR, TILE_SIZE, WINDOW_H, WINDOW_W,
+    POWERUP_SYMBOLS, SHRINK_WARN_TICKS, SOFT_BLOCK_COLOUR, SOLID_WALL_COLOUR,
+    TILE_SIZE, WINDOW_H, WINDOW_W,
 )
+from systems.world import ring_cells
 
 _PLAYER_SPRITE_PATH = Path(__file__).parent.parent / 'resources' / 'sprites' / 'player.png'
 _PLAYER_ANIM_FRAME_SIZE = 32   # each frame is 32×32 in the sheet
@@ -40,13 +42,19 @@ _TILE_COLOURS = {
 
 
 class GameView:
+    """Stateless renderer that draws a ``GameState`` each frame."""
+
     def __init__(self) -> None:
         self._tile_list: arcade.shape_list.ShapeElementList | None = None
         self._last_tiles_version: int = -1
         self._bomb_start_times: dict[tuple[int, int], float] = {}
+        self._window_w = WINDOW_W
+        self._window_h = WINDOW_H
         self._map_w = GRID_COLS * TILE_SIZE
         self._map_h = GRID_ROWS * TILE_SIZE
         self._camera = self._make_camera(WINDOW_W, WINDOW_H)
+        self._shrink_warn_ring: int = 0
+        self._shrink_flash_start: float = 0.0
         self._walk_animation: arcade.TextureAnimation | None = None
         self._player_sprites: dict[int, arcade.TextureAnimationSprite] = {}
         self._anim_last_time: float = 0.0
@@ -87,7 +95,23 @@ class GameView:
         )
 
     def on_resize(self, width: int, height: int) -> None:
+        """Rebuild the camera to match the new window dimensions.
+
+        Parameters
+        ----------
+        width : int
+            New window width in pixels.
+        height : int
+            New window height in pixels.
+        """
+        self._window_w, self._window_h = width, height
         self._camera = self._make_camera(width, height)
+
+    def set_map_size(self, cols: int, rows: int) -> None:
+        """Resize the camera framing to match the round's actual grid dimensions."""
+        self._map_w = cols * TILE_SIZE
+        self._map_h = rows * TILE_SIZE
+        self._camera = self._make_camera(self._window_w, self._window_h)
 
     def draw(
         self,
@@ -99,12 +123,33 @@ class GameView:
         predicted_vy: float | None = None,
         speed: float | None = None,
     ) -> None:
+        """Draw the full frame: tiles, entities, particles and the HUD.
+
+        Parameters
+        ----------
+        state : GameState
+            The game state to render.
+        local_player_id : int, optional
+            ID of the locally-controlled player, used to apply predicted
+            position/velocity instead of the server-reported ones.
+        predicted_x : float, optional
+            Client-predicted x position for the local player.
+        predicted_y : float, optional
+            Client-predicted y position for the local player.
+        predicted_vx : float, optional
+            Client-predicted x velocity for the local player.
+        predicted_vy : float, optional
+            Client-predicted y velocity for the local player.
+        speed : float, optional
+            Current speed value to display in the speed widget, if any.
+        """
         now = time.monotonic()
         dt = now - self._last_frame_time if self._last_frame_time else 0.0
         self._last_frame_time = now
 
         with self._camera.activate():
             self._draw_tiles(state)
+            self._draw_shrink_warning(state)
             self._draw_powerups(state)
             self._draw_bombs(state)
             self._draw_explosions(state)
@@ -137,6 +182,29 @@ class GameView:
                                                               TILE_SIZE - 2, colour)
                 )
         self._tile_list = shape_list
+
+    def _draw_shrink_warning(self, state: GameState) -> None:
+        """Flash the ring of cells about to become perimeter walls, using the
+        same pulsing glow as a bomb fuse (see _draw_bombs)."""
+        if not state.shrink_warn_ring:
+            self._shrink_warn_ring = 0
+            return
+        now = time.monotonic()
+        if state.shrink_warn_ring != self._shrink_warn_ring:
+            self._shrink_warn_ring = state.shrink_warn_ring
+            self._shrink_flash_start = now
+        elapsed = now - self._shrink_flash_start
+        fuse_ratio = max(0.0, state.shrink_warn_ticks_remaining / SHRINK_WARN_TICKS)
+        freq = 1.0 + (1.0 - fuse_ratio) * 5.0
+        pulse = (-math.cos(2 * math.pi * freq * elapsed) + 1) * 0.5
+        glow_alpha = int(pulse * 220)
+        colour = (BOMB_PULSE_COLOUR[0], BOMB_PULSE_COLOUR[1], BOMB_PULSE_COLOUR[2], glow_alpha)
+        for c, r in ring_cells(state.map_cols, state.map_rows, state.shrink_warn_ring):
+            if state.tiles[r][c] == TileKind.SOLID_WALL:
+                continue
+            cx = c * TILE_SIZE + TILE_SIZE / 2
+            cy = r * TILE_SIZE + TILE_SIZE / 2
+            arcade.draw_rect_filled(arcade.XYWH(cx, cy, TILE_SIZE, TILE_SIZE), colour)
 
     # ── Other elements ────────────────────────────────────────────────────────
 

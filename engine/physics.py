@@ -22,6 +22,13 @@ _PASSABLE_TILE = 0   # TileKind.EMPTY — avoid importing core here
 
 
 class PhysicsSpace:
+    """Wrapper around a pymunk ``Space`` managing players, bombs, and tile walls.
+
+    Used identically by the server (full space: all players, all bombs, all
+    tile walls) and by client-side prediction (a lightweight local space
+    rebuilt from server snapshots).
+    """
+
     def __init__(self) -> None:
         self._space = pymunk.Space()
         self._space.gravity = (0, 0)
@@ -38,6 +45,14 @@ class PhysicsSpace:
     # ── Tile walls ────────────────────────────────────────────────────────────
 
     def rebuild_static_walls(self, tiles: list[list]) -> None:
+        """Rebuild all static wall shapes from a tile grid, replacing any existing ones.
+
+        Parameters
+        ----------
+        tiles : list of list
+            Row-major grid of tile kind values; any value other than the
+            passable tile kind gets a static wall shape.
+        """
         for shape in self._static_shapes.values():
             self._space.remove(shape)
         self._static_shapes.clear()
@@ -62,21 +77,55 @@ class PhysicsSpace:
         return shape
 
     def remove_wall(self, col: int, row: int) -> None:
+        """Remove the wall shape at a tile position, if one exists, and mark it passable.
+
+        Parameters
+        ----------
+        col : int
+            Tile column index.
+        row : int
+            Tile row index.
+        """
         shape = self._static_shapes.pop((col, row), None)
         if shape is not None:
             self._space.remove(shape)
         if self._tiles:
             self._tiles[row][col] = _PASSABLE_TILE
 
-    def add_wall(self, col: int, row: int) -> None:
+    def add_wall(self, col: int, row: int, kind: int = 2) -> None:
+        """Add a wall shape at a tile position and record its tile kind.
+
+        Parameters
+        ----------
+        col : int
+            Tile column index.
+        row : int
+            Tile row index.
+        kind : int, optional
+            Tile kind to store for this position (default 2,
+            ``TileKind.SOFT_BLOCK``, to preserve existing callers such as
+            rubble-bomb scatter). Pass ``TileKind.SOLID_WALL`` explicitly for
+            indestructible walls such as the perimeter shrink.
+        """
         if (col, row) not in self._static_shapes:
             self._static_shapes[(col, row)] = self._make_wall_shape(col, row)
         if self._tiles:
-            self._tiles[row][col] = 2  # TileKind.SOFT_BLOCK — non-zero for _correct_player_positions
+            self._tiles[row][col] = kind
 
     # ── Players ───────────────────────────────────────────────────────────────
 
     def add_player(self, player_id: int, px: float, py: float) -> None:
+        """Add a player body to the space at the given position.
+
+        Parameters
+        ----------
+        player_id : int
+            Identifier of the player.
+        px : float
+            Initial x position, in pixels.
+        py : float
+            Initial y position, in pixels.
+        """
         body = pymunk.Body(mass=1, moment=float('inf'))  # no rotation
         body.position = (px, py)
         shape = pymunk.Circle(body, PLAYER_RADIUS)
@@ -87,33 +136,100 @@ class PhysicsSpace:
         self._player_bodies[player_id] = (body, shape)
 
     def remove_player(self, player_id: int) -> None:
+        """Remove a player's body and shape from the space, if present.
+
+        Parameters
+        ----------
+        player_id : int
+            Identifier of the player to remove.
+        """
         entry = self._player_bodies.pop(player_id, None)
         if entry:
             body, shape = entry
             self._space.remove(body, shape)
 
     def set_player_velocity(self, player_id: int, vx: float, vy: float) -> None:
+        """Set a player body's velocity directly.
+
+        Parameters
+        ----------
+        player_id : int
+            Identifier of the player.
+        vx : float
+            Velocity along x, in pixels per second.
+        vy : float
+            Velocity along y, in pixels per second.
+        """
         if entry := self._player_bodies.get(player_id):
             entry[0].velocity = (vx, vy)
 
     def get_player_position(self, player_id: int) -> tuple[float, float] | None:
+        """Get a player's current position.
+
+        Parameters
+        ----------
+        player_id : int
+            Identifier of the player.
+
+        Returns
+        -------
+        tuple of float, or None
+            The ``(x, y)`` position in pixels, or None if the player has no
+            body in the space.
+        """
         if entry := self._player_bodies.get(player_id):
             pos = entry[0].position
             return pos.x, pos.y
         return None
 
     def get_player_velocity(self, player_id: int) -> tuple[float, float]:
+        """Get a player's current velocity.
+
+        Parameters
+        ----------
+        player_id : int
+            Identifier of the player.
+
+        Returns
+        -------
+        tuple of float
+            The ``(vx, vy)`` velocity in pixels per second, or ``(0.0, 0.0)``
+            if the player has no body in the space.
+        """
         if entry := self._player_bodies.get(player_id):
             v = entry[0].velocity
             return v.x, v.y
         return (0.0, 0.0)
 
     def has_player(self, player_id: int) -> bool:
+        """Check whether a player currently has a body in the space.
+
+        Parameters
+        ----------
+        player_id : int
+            Identifier of the player.
+
+        Returns
+        -------
+        bool
+            True if the player has a body in the space.
+        """
         return player_id in self._player_bodies
 
     # ── Bombs ─────────────────────────────────────────────────────────────────
 
     def add_bomb(self, bomb_idx: int, px: float, py: float) -> None:
+        """Add a bomb body to the space at the given position.
+
+        Parameters
+        ----------
+        bomb_idx : int
+            Index of the bomb in the game state's bomb list.
+        px : float
+            Initial x position, in pixels.
+        py : float
+            Initial y position, in pixels.
+        """
         size = BOMB_HALF_SIZE * 2
         body = pymunk.Body(
             mass=0.5,
@@ -128,23 +244,57 @@ class PhysicsSpace:
         self._bomb_bodies[bomb_idx] = (body, shape)
 
     def remove_bomb(self, bomb_idx: int) -> None:
+        """Remove a bomb's body and shape from the space, if present.
+
+        Parameters
+        ----------
+        bomb_idx : int
+            Index of the bomb to remove.
+        """
         entry = self._bomb_bodies.pop(bomb_idx, None)
         if entry:
             body, shape = entry
             self._space.remove(body, shape)
 
     def get_bomb_position(self, bomb_idx: int) -> tuple[float, float] | None:
+        """Get a bomb's current position.
+
+        Parameters
+        ----------
+        bomb_idx : int
+            Index of the bomb.
+
+        Returns
+        -------
+        tuple of float, or None
+            The ``(x, y)`` position in pixels, or None if the bomb has no
+            body in the space.
+        """
         if entry := self._bomb_bodies.get(bomb_idx):
             pos = entry[0].position
             return pos.x, pos.y
         return None
 
     def bomb_indices(self) -> list[int]:
+        """List the indices of all bombs currently in the space.
+
+        Returns
+        -------
+        list of int
+            Indices of bombs with bodies in the space.
+        """
         return list(self._bomb_bodies.keys())
 
     # ── Step ──────────────────────────────────────────────────────────────────
 
     def step(self, dt: float) -> None:
+        """Advance the physics simulation by one time step.
+
+        Parameters
+        ----------
+        dt : float
+            Time step duration, in seconds.
+        """
         self._space.step(dt)
         if self._tiles:
             self._correct_player_positions()

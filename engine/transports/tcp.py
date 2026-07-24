@@ -18,7 +18,6 @@ from uuid import UUID, uuid4
 
 from engine.transport import (
     CHANNEL_RELIABLE,
-    CHANNEL_UNRELIABLE,
     ConnectEvent,
     DisconnectEvent,
     ReceiveEvent,
@@ -39,9 +38,25 @@ class _RecvBuffer:
         self._buf = bytearray()
 
     def feed(self, chunk: bytes) -> None:
+        """Append raw bytes received from the socket to the internal buffer.
+
+        Parameters
+        ----------
+        chunk : bytes
+            Raw bytes read from the socket to append to the buffer.
+        """
         self._buf.extend(chunk)
 
     def messages(self) -> list[tuple[int, bytes]]:
+        """Extract all complete messages currently available in the buffer.
+
+        Returns
+        -------
+        list of tuple of (int, bytes)
+            Each tuple is a decoded ``(channel, payload)`` pair for a
+            fully-received frame. Consumed bytes are removed from the
+            internal buffer.
+        """
         out: list[tuple[int, bytes]] = []
         while len(self._buf) >= _HEADER.size:
             length, channel = _HEADER.unpack_from(self._buf)
@@ -62,6 +77,15 @@ class _Peer:
         self._send_queue: deque[bytes] = deque()
 
     def queue_send(self, data: bytes, channel: int) -> None:
+        """Encode a payload and enqueue it for sending on the next flush.
+
+        Parameters
+        ----------
+        data : bytes
+            Payload to send to the peer.
+        channel : int
+            Channel identifier (e.g. ``CHANNEL_RELIABLE``) to tag the frame with.
+        """
         self._send_queue.append(_encode(data, channel))
 
     def flush(self) -> bool:
@@ -96,6 +120,7 @@ class _Peer:
         return self.recv_buf.messages()
 
     def close(self) -> None:
+        """Close the underlying socket, ignoring any errors."""
         try:
             self.sock.close()
         except OSError:
@@ -105,6 +130,8 @@ class _Peer:
 # ── Server ─────────────────────────────────────────────────────────────────────
 
 class TCPServerTransport:
+    """TCP transport backend that accepts and manages multiple client connections."""
+
     def __init__(self, host: str = "0.0.0.0", port: int = 9000,
                  max_clients: int = 16) -> None:
         self._max_clients = max_clients
@@ -118,6 +145,19 @@ class TCPServerTransport:
         self._select_list: list[socket.socket] = [self._listen]
 
     def poll(self, timeout: float = 0) -> list[TransportEvent]:
+        """Accept new connections, receive data, and flush outbound queues.
+
+        Parameters
+        ----------
+        timeout : float, optional
+            Maximum time in seconds to block in ``select`` waiting for
+            readable sockets (default 0, i.e. non-blocking).
+
+        Returns
+        -------
+        list of TransportEvent
+            Connect, receive, and disconnect events generated during this poll.
+        """
         events: list[TransportEvent] = []
 
         readable, _, _ = select.select(self._select_list, [], [], timeout)
@@ -140,20 +180,48 @@ class TCPServerTransport:
 
     def send(self, peer_id: UUID, data: bytes,
              channel: int = CHANNEL_RELIABLE) -> None:
+        """Queue data to be sent to a single connected peer.
+
+        Parameters
+        ----------
+        peer_id : UUID
+            Identifier of the target peer; unknown ids are silently ignored.
+        data : bytes
+            Payload to send.
+        channel : int, optional
+            Channel identifier to tag the frame with (default ``CHANNEL_RELIABLE``).
+        """
         if peer := self._peers.get(peer_id):
             peer.queue_send(data, channel)
 
     def broadcast(self, data: bytes,
                   channel: int = CHANNEL_RELIABLE) -> None:
+        """Queue data to be sent to every currently connected peer.
+
+        Parameters
+        ----------
+        data : bytes
+            Payload to send to all peers.
+        channel : int, optional
+            Channel identifier to tag the frame with (default ``CHANNEL_RELIABLE``).
+        """
         frame = _encode(data, channel)
         for peer in self._peers.values():
             peer._send_queue.append(frame)
 
     def disconnect(self, peer_id: UUID) -> None:
+        """Forcibly drop a connected peer.
+
+        Parameters
+        ----------
+        peer_id : UUID
+            Identifier of the peer to disconnect; unknown ids are ignored.
+        """
         if peer_id in self._peers:
             self._drop(peer_id, [])
 
     def close(self) -> None:
+        """Close all peer connections and the listening socket."""
         for peer in list(self._peers.values()):
             peer.close()
         self._peers.clear()
@@ -204,6 +272,8 @@ class TCPServerTransport:
 # ── Client ─────────────────────────────────────────────────────────────────────
 
 class TCPClientTransport:
+    """TCP transport backend that connects to a single remote server."""
+
     def __init__(self, host: str = "127.0.0.1", port: int = 9000) -> None:
         self._host = host
         self._port = port
@@ -220,9 +290,26 @@ class TCPClientTransport:
 
     @property
     def connected(self) -> bool:
+        """Whether the client currently has an established connection."""
         return self._connected
 
     def poll(self, timeout: float = 0) -> list[TransportEvent]:
+        """Advance the connection state machine and process socket I/O.
+
+        Handles the in-progress connection handshake, flushes queued
+        outbound data, reads incoming messages, and detects disconnection.
+
+        Parameters
+        ----------
+        timeout : float, optional
+            Maximum time in seconds to block in ``select`` waiting for
+            socket readiness (default 0, i.e. non-blocking).
+
+        Returns
+        -------
+        list of TransportEvent
+            Connect, receive, and disconnect events generated during this poll.
+        """
         events: list[TransportEvent] = []
 
         if self._connecting:
@@ -275,15 +362,27 @@ class TCPClientTransport:
         return events
 
     def send(self, data: bytes, channel: int = CHANNEL_RELIABLE) -> None:
+        """Queue data to be sent to the server if currently connected.
+
+        Parameters
+        ----------
+        data : bytes
+            Payload to send.
+        channel : int, optional
+            Channel identifier to tag the frame with (default ``CHANNEL_RELIABLE``).
+        """
         if self._connected:
             self._peer.queue_send(data, channel)
 
     def disconnect(self) -> None:
+        """Close the connection and reset connection state flags."""
         self._connected = False
         self._connecting = False
         self._peer.close()
 
     def reconnect(self) -> None:
+        """Close the current socket and start a new non-blocking connection
+        attempt to the same host and port."""
         self._peer.close()
         self._connected = False
         self._connecting = True

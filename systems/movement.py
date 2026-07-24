@@ -15,6 +15,25 @@ def process_movement(
     inputs: list[PlayerInput],
     tick_dt: float,
 ) -> None:
+    """Apply per-player movement inputs and step physics for one tick.
+
+    Converts each input's move vector into a velocity (honouring reversed
+    controls and speed level, and normalising diagonal movement), steps
+    the physics space, then writes the resulting player and bomb
+    positions/velocities back into `state`.
+
+    Parameters
+    ----------
+    state : GameState
+        Current game state; `state.player_physics` and bomb positions
+        are updated in place.
+    space : PhysicsSpace
+        Physics space used to set velocities and advance the simulation.
+    inputs : list[PlayerInput]
+        Per-player movement inputs for this tick.
+    tick_dt : float
+        Fixed timestep, in seconds, to advance the physics space by.
+    """
     for inp in inputs:
         stats = state.players.get(inp.player_id)
 

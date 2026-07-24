@@ -3,13 +3,9 @@ from __future__ import annotations
 
 import math
 import time
-
-import arcade
 from datetime import datetime
 
-
-def _ts() -> str:
-    return datetime.now().strftime('%H:%M:%S.%f')[:-3]
+import arcade
 
 from app.game_view import GameView
 from app.sound_system import SoundSystem
@@ -18,14 +14,23 @@ from core.state import GameState
 from net.client import GameClient
 from net.protocol import GameOverMsg, GameStartMsg, InputMsg
 from engine.config import MIN_LEAD_TICKS, MAX_LEAD_TICKS, DEFAULT_LEAD_TICKS
-from engine import user_prefs
 from systems.prediction import PredictionEngine
 
 # EWMA smoothing factor for RTT — matches TCP's default (slow to react, spike-resistant)
 _RTT_ALPHA = 0.125
 
 
+def _ts() -> str:
+    return datetime.now().strftime('%H:%M:%S.%f')[:-3]
+
+
 class GameScene:
+    """Run the active gameplay scene, bridging arcade's render loop with server tick snapshots.
+
+    Owns client-side prediction/reconciliation, RTT-based lead tick estimation,
+    input sampling and dispatch, and drawing of the game view and its overlays.
+    """
+
     def __init__(self, client: GameClient,
                  scene_manager: "SceneManager",  # type: ignore[name-defined]
                  player_name: str = "Player",
@@ -56,6 +61,8 @@ class GameScene:
         pid = client.player_id
         state = start_state if start_state is not None else client.get_state()
         current = client.get_state()
+        if state is not None:
+            self._view.set_map_size(state.map_cols, state.map_rows)
         base_tick = current.tick if current else (state.tick if state else 0)
         self._tick = base_tick + DEFAULT_LEAD_TICKS
         if pid is not None:
@@ -73,15 +80,29 @@ class GameScene:
         return max(MIN_LEAD_TICKS, min(MAX_LEAD_TICKS, math.ceil(one_way_s / tick_dt) + 1))
 
     def update(self, dt: float) -> None:
+        """Advance the client simulation by one frame.
+
+        Polls pending non-state server messages (game over, reconnect), reconciles
+        the local prediction with the latest server snapshot, updates sound state
+        and the smoothed RTT estimate, and steps the fixed-rate tick counter,
+        sending an input message for each tick that elapses.
+
+        Parameters
+        ----------
+        dt : float
+            Elapsed wall-clock time in seconds since the previous frame.
+        """
         # Check for non-state messages (game over, reconnect, etc.)
         for msg in self._client.poll_messages():
             if isinstance(msg, GameOverMsg):
                 self._sounds.stop()
                 self._pending_game_over = msg
                 return
-            elif isinstance(msg, GameStartMsg):
+            if isinstance(msg, GameStartMsg):
                 # Reconnected mid-game — reset tick and prediction for spectator role
                 state = self._client.get_state()
+                if state is not None:
+                    self._view.set_map_size(state.map_cols, state.map_rows)
                 tick_rate = self._client.tick_rate
                 self._tick = (state.tick if state else 0) + DEFAULT_LEAD_TICKS
                 self._send_times.clear()
@@ -117,8 +138,7 @@ class GameScene:
         # Advance lead tick counter to match target lead; never go backwards
         if state:
             target = state.tick + self._lead_ticks
-            if self._tick < target:
-                self._tick = target
+            self._tick = max(self._tick, target)
 
         self._tick_accum += min(dt, tick_dt)
         while self._tick_accum >= tick_dt:
@@ -134,6 +154,13 @@ class GameScene:
                           f"lead={lead} (target {self._lead_ticks}) rtt={rtt_ms:.1f}ms")
 
     def draw(self) -> None:
+        """Render the current frame.
+
+        Draws the latest server state blended with client-side prediction (when
+        available), overlays a reconnecting indicator while the client is
+        reconnecting, and transitions to the game-over scene once a game-over
+        message is pending.
+        """
         state = self._client.get_state()
         if state is None:
             return
@@ -166,6 +193,19 @@ class GameScene:
             )
 
     def on_key_press(self, key: int, modifiers: int) -> None:
+        """Handle an arcade key-press event.
+
+        Opens the pause menu on Escape, otherwise records the key as held so it
+        is sampled on the next input tick, and toggles the debug sound pitch
+        step on T while in debug mode.
+
+        Parameters
+        ----------
+        key : int
+            The arcade key code that was pressed.
+        modifiers : int
+            Bitmask of modifier keys held during the press.
+        """
         if key == arcade.key.ESCAPE:
             from app.scenes.pause_menu_scene import PauseMenuScene
             self._scene_manager.push(PauseMenuScene(self, self._scene_manager, self._sounds))
@@ -175,9 +215,11 @@ class GameScene:
             self._sounds.step_pitch()
 
     def on_key_release(self, key: int, modifiers: int) -> None:
+        """Handle an arcade key-release event by clearing the key's held state."""
         self._keys.discard(key)
 
     def on_resize(self, width: int, height: int) -> None:
+        """Handle an arcade window-resize event by forwarding the new size to the view."""
         self._view.on_resize(width, height)
 
     def _send_input(self, tick: int) -> None:

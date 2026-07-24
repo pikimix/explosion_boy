@@ -107,6 +107,13 @@ def _make_player_hud(pid: int) -> _PlayerHud:
 
 
 def draw(state: GameState) -> None:
+    """Draw the per-player HUD stats and the powerup legend for the given state.
+
+    Parameters
+    ----------
+    state : GameState
+        The current game state, used to read player stats and colours.
+    """
     win = arcade.get_window()
 
     # Drop cached huds for players who have left
@@ -167,10 +174,10 @@ def draw(state: GameState) -> None:
             slot_text.draw()
         y -= _SLOT_H + _PLAYER_GAP
 
-    _draw_legend(win)
+    _draw_legend()
 
 
-def _draw_legend(win: arcade.Window) -> None:
+def _draw_legend() -> None:
     global _legend_header
     bottom_margin = 8.0
     total_h = _LEGEND_H + len(_LEGEND_ENTRIES) * _LEGEND_H

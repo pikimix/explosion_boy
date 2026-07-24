@@ -16,6 +16,13 @@ _hint_label: arcade.Text | None = None
 
 
 def draw(speed: float) -> None:
+    """Draw the debug speed multiplier widget above the volume widget.
+
+    Parameters
+    ----------
+    speed : float
+        Current speed multiplier to display (e.g. 1.0x normal speed).
+    """
     global _label, _hint_label
     bg_w = HUD_WIDTH - _PADDING * 2
     cx = _BAR_CX

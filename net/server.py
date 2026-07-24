@@ -8,10 +8,6 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-
-def _ts() -> str:
-    return datetime.now().strftime('%H:%M:%S.%f')[:-3]
-
 from core.clock import TickClock
 from core.components import GamePhase, PlayerInput
 from core.serialiser import decode_state, encode_state
@@ -56,9 +52,16 @@ from systems.powerup_system import (
     tick_status_effects,
     _LAST_2_SPAWN_INTERVAL,
 )
+from systems.shrink_system import process_perimeter_shrink
+
+
+def _ts() -> str:
+    return datetime.now().strftime('%H:%M:%S.%f')[:-3]
 
 
 class GameServer:
+    """Authoritative headless game server owning simulation, networking, and rollback."""
+
     def __init__(
         self,
         transport: ServerTransport,
@@ -93,6 +96,7 @@ class GameServer:
         self._bus.subscribe(PlayerDiedEvent, self._on_player_died)
 
     def run(self) -> None:
+        """Run the main server loop, polling the transport and ticking the game forever."""
         print(f"[{_ts()}] Server running at {self._tick_rate} tps "
               f"(rollback window: {self._rollback_buffer_size} ticks). Waiting for players…")
         while True:
@@ -269,7 +273,7 @@ class GameServer:
         self._state.tick = tick
         process_movement(self._state, self._space, inputs, self._tick_dt)
         sync_grid_positions(self._state)
-        tick_explosions(self._state, self._bus)
+        tick_explosions(self._state)
         apply_new_bombs(self._state, self._space, inputs)
         sync_pushed_bombs(self._state, self._space)
         detonations = process_fuses(self._state)
@@ -278,6 +282,7 @@ class GameServer:
             return
         process_powerup_pickups(self._state)
         tick_status_effects(self._state)
+        process_perimeter_shrink(self._state, self._space, self._bus)
         self._maybe_spawn_last_2_powerup(tick)
         self._check_win_condition()
 

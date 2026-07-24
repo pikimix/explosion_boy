@@ -12,14 +12,11 @@ from PIL import Image
 
 from app.sound_system import SoundSystem
 from app.ui.hud import HUD_WIDTH
-from core.components import TileKind
 from net.client import GameClient
 from net.protocol import GameStartMsg, LobbyUpdateMsg
 from engine import user_prefs
-from engine.config import (
-    GRID_COLS, GRID_ROWS, PLAYER_COLOURS, SPAWN_POINTS,
-    TILE_SIZE, WINDOW_H, WINDOW_W,
-)
+from engine.config import PLAYER_COLOURS, TILE_SIZE, WINDOW_H, WINDOW_W
+from systems.world import map_size_for_player_count, spawn_points_for_grid
 
 _LOBBY_MUSIC_PATH = Path(__file__).parent.parent.parent / 'resources' / 'music' / 'in_the_lobby.wav'
 
@@ -48,6 +45,8 @@ _SLIDER_SEGMENTS = 24     # gradient segments in brightness slider
 
 
 class LobbyScene:
+    """Waiting-room scene where players join, edit their name/colour, and ready up."""
+
     def __init__(self, client: GameClient, player_name: str,
                  scene_manager: 'SceneManager',  # type: ignore[name-defined]
                  music_volume: float = 1.0,
@@ -77,10 +76,11 @@ class LobbyScene:
         self._picker_open = False
         self._wheel_texture: arcade.Texture | None = None
 
-        self._tile_shapes = self._build_preview_tiles()
-        self._map_w = GRID_COLS * TILE_SIZE
-        self._map_h = GRID_ROWS * TILE_SIZE
+        self._spawn_points: list[tuple[int, int]] = []
+        self._map_w = WINDOW_W
+        self._map_h = WINDOW_H
         self._camera = self._make_camera(WINDOW_W, WINDOW_H)
+        self._rebuild_preview(len(self._players))
 
         play_cx = HUD_WIDTH + (WINDOW_W - HUD_WIDTH) / 2
         self._title_text = arcade.Text(
@@ -203,6 +203,19 @@ class LobbyScene:
         return slider_left, slider_right, slider_bottom, slider_top
 
     def on_mouse_press(self, x: float, y: float, button: int, modifiers: int) -> None:
+        """Handle a left click on the colour picker, name input box, or colour swatch.
+
+        Parameters
+        ----------
+        x : float
+            X coordinate of the click, in window space.
+        y : float
+            Y coordinate of the click, in window space.
+        button : int
+            Mouse button that was pressed.
+        modifiers : int
+            Bitmask of modifier keys held during the click.
+        """
         if button != arcade.MOUSE_BUTTON_LEFT:
             return
         if self._picker_open:
@@ -236,6 +249,17 @@ class LobbyScene:
     def on_mouse_drag(
         self, x: float, y: float, _dx: float, _dy: float, buttons: int, _modifiers: int
     ) -> None:
+        """Update the colour picker while the left mouse button is dragged across it.
+
+        Parameters
+        ----------
+        x : float
+            Current X coordinate of the pointer, in window space.
+        y : float
+            Current Y coordinate of the pointer, in window space.
+        buttons : int
+            Bitmask of mouse buttons currently held down.
+        """
         if buttons & arcade.MOUSE_BUTTON_LEFT and self._picker_open:
             self._handle_picker_input(x, y)
 
@@ -255,7 +279,7 @@ class LobbyScene:
             self._saturation = min(dist / (_WHEEL_SIZE / 2), 1.0)
             self._update_colour_from_hsv()
             self._client.send_colour(self._colour_rgb)
-            user_prefs.set('colour_rgb', list(self._colour_rgb))
+            user_prefs.set_pref('colour_rgb', list(self._colour_rgb))
             return True
 
         # Slider → update brightness
@@ -264,7 +288,7 @@ class LobbyScene:
             self._value = max(0.0, min(1.0, (x - sl) / (sr - sl)))
             self._update_colour_from_hsv()
             self._client.send_colour(self._colour_rgb)
-            user_prefs.set('colour_rgb', list(self._colour_rgb))
+            user_prefs.set_pref('colour_rgb', list(self._colour_rgb))
             return True
 
         return False
@@ -281,13 +305,13 @@ class LobbyScene:
 
     # ── Map preview ───────────────────────────────────────────────────────────
 
-    def _build_preview_tiles(self) -> arcade.shape_list.ShapeElementList:
+    def _build_preview_tiles(self, cols: int, rows: int) -> arcade.shape_list.ShapeElementList:
         shape_list = arcade.shape_list.ShapeElementList()
-        for row in range(GRID_ROWS):
-            for col in range(GRID_COLS):
+        for row in range(rows):
+            for col in range(cols):
                 is_wall = (
-                    row == 0 or row == GRID_ROWS - 1
-                    or col == 0 or col == GRID_COLS - 1
+                    row == 0 or row == rows - 1
+                    or col == 0 or col == cols - 1
                     or (row % 2 == 0 and col % 2 == 0)
                 )
                 colour = _SOLID_COLOUR if is_wall else _EMPTY_COLOUR
@@ -300,15 +324,38 @@ class LobbyScene:
                 )
         return shape_list
 
+    def _rebuild_preview(self, n: int) -> None:
+        """Recompute preview size/tiles/spawns/camera to match the grid a round
+        would use with n players (engine/config's MIN_GRID_SIZE..MAX_GRID_SIZE)."""
+        cols, rows = map_size_for_player_count(n)
+        self._map_w = cols * TILE_SIZE
+        self._map_h = rows * TILE_SIZE
+        self._spawn_points = spawn_points_for_grid(cols, rows)
+        self._tile_shapes = self._build_preview_tiles(cols, rows)
+        win = arcade.get_window()
+        self._camera = self._make_camera(win.width, win.height)
+
     # ── Network ───────────────────────────────────────────────────────────────
 
     def update(self, dt: float) -> None:
+        """Advance the name-cursor blink timer and process pending network messages.
+
+        Applies lobby updates (player list, ready status, colour sync to the
+        server) and swaps to `GameScene` when the server sends a game-start
+        message.
+
+        Parameters
+        ----------
+        dt : float
+            Time elapsed, in seconds, since the previous update.
+        """
         self._cursor_blink = (self._cursor_blink + dt) % 1.0
         if self._client.reject_reason is not None:
             return
         for msg in self._client.poll_messages():
             if isinstance(msg, LobbyUpdateMsg):
                 self._players = msg.players
+                self._rebuild_preview(len(self._players))
                 if self._client.player_id is not None and not self._colour_initialised:
                     pid = self._client.player_id
                     initial = PLAYER_COLOURS[pid % len(PLAYER_COLOURS)]
@@ -338,6 +385,7 @@ class LobbyScene:
     # ── Draw ──────────────────────────────────────────────────────────────────
 
     def draw(self) -> None:
+        """Render the map preview, title/waiting text, HUD, colour picker, and overlays."""
         with self._camera.activate():
             self._tile_shapes.draw()
             self._spawn_shapes.draw()
@@ -503,6 +551,15 @@ class LobbyScene:
         self._picker_close_text.draw()
 
     def on_resize(self, width: int, height: int) -> None:
+        """Rebuild the camera and reposition title/waiting text after a window resize.
+
+        Parameters
+        ----------
+        width : int
+            New window width, in pixels.
+        height : int
+            New window height, in pixels.
+        """
         self._camera = self._make_camera(width, height)
         play_cx = HUD_WIDTH + (width - HUD_WIDTH) / 2
         self._title_text.x = play_cx
@@ -511,6 +568,14 @@ class LobbyScene:
         self._waiting_text.y = height / 2
 
     def on_text(self, text: str) -> None:
+        """Append printable characters typed by the player to the in-progress name draft.
+
+        Parameters
+        ----------
+        text : str
+            Text input reported by the window; ignored unless the name box
+            is currently being edited.
+        """
         if not self._editing_name:
             return
         for ch in text:
@@ -524,9 +589,18 @@ class LobbyScene:
         if stripped and stripped != self._player_name:
             self._player_name = stripped
             self._client.send_rename(stripped)
-            user_prefs.set('name', stripped)
+            user_prefs.set_pref('name', stripped)
 
     def on_key_press(self, key: int, modifiers: int) -> None:
+        """Handle name-editing keys, ESCAPE (close picker/open pause menu), SPACE (toggle ready).
+
+        Parameters
+        ----------
+        key : int
+            Key code of the pressed key.
+        modifiers : int
+            Bitmask of modifier keys held during the press.
+        """
         if self._editing_name:
             if key == arcade.key.BACKSPACE:
                 self._name_draft = self._name_draft[:-1]
@@ -548,7 +622,7 @@ class LobbyScene:
             self._client.send_ready(self._ready)
 
     def on_key_release(self, key: int, modifiers: int) -> None:
-        pass
+        """Do nothing; required by arcade's key-release event interface."""
 
     # ── Spawn markers ─────────────────────────────────────────────────────────
 
@@ -557,7 +631,7 @@ class LobbyScene:
         texts = []
         for p in self._players:
             pid = p['id']
-            col, row = SPAWN_POINTS[pid]
+            col, row = self._spawn_points[pid]
             px = col * TILE_SIZE + TILE_SIZE / 2
             py = row * TILE_SIZE + TILE_SIZE / 2
             colour_rgb = tuple(p.get('colour_rgb', PLAYER_COLOURS[pid % len(PLAYER_COLOURS)][:3]))

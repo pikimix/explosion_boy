@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import threading
 from collections import deque
-from typing import Callable
 
 from core.state import GameState
 from net.protocol import (
@@ -33,13 +32,23 @@ from net.protocol import (
     WelcomeMsg,
     decode_any,
 )
-from engine.transport import CHANNEL_RELIABLE, CHANNEL_UNRELIABLE, ClientTransport
+from engine.transport import CHANNEL_RELIABLE, ClientTransport
 
 
 _RECONNECT_DELAYS = [2.0, 4.0, 8.0, 16.0, 30.0]
 
 
 class GameClient:
+    """Own the connection to the game server and bridge it to the main thread.
+
+    Instances spawn a background network thread on construction that owns
+    the ``ClientTransport`` and exchanges messages with the server. The
+    main (arcade) thread interacts with this class only through its
+    thread-safe "Main-thread API" methods below (``get_state``,
+    ``queue_input``, ``poll_messages``, the ``send_*`` methods, and the
+    read-only properties); it must never touch the transport directly.
+    """
+
     def __init__(self, transport: ClientTransport) -> None:
         self._transport = transport
         self._player_id: int | None = None
@@ -60,52 +69,116 @@ class GameClient:
 
     @property
     def player_id(self) -> int | None:
+        """Return the player id assigned by the server, or None before welcome."""
         return self._player_id
 
     @property
     def tick_rate(self) -> int:
+        """Return the server's simulation tick rate in ticks per second."""
         return self._tick_rate
 
     @property
     def connected(self) -> bool:
+        """Return whether the underlying transport currently has a live connection."""
         return self._transport.connected
 
     @property
     def reconnecting(self) -> bool:
+        """Return whether the net thread is currently attempting to reconnect."""
         return self._reconnecting
 
     @property
     def reject_reason(self) -> str | None:
+        """Return the reason the server rejected this client, or None if not rejected."""
         return self._reject_reason
 
     def get_state(self) -> GameState | None:
+        """Return the most recently received game state snapshot.
+
+        Reads ``last_state`` under the lock shared with the net thread, so
+        it is safe to call from the main thread while the net thread is
+        writing a newer snapshot.
+
+        Returns
+        -------
+        GameState or None
+            The latest decoded state, or None if no snapshot has been
+            received yet.
+        """
         with self._lock:
             return self._last_state
 
     def queue_input(self, inp: InputMsg) -> None:
+        """Queue a player input to be sent to the server by the net thread.
+
+        Parameters
+        ----------
+        inp : InputMsg
+            The input message to enqueue for sending.
+        """
         self._pending_inputs.append(inp)
 
     def send_join(self, name: str) -> None:
+        """Record the player's name and send a join request to the server.
+
+        Parameters
+        ----------
+        name : str
+            The name the player wishes to join the game with.
+        """
         self._player_name = name
         self._transport.send(JoinMsg(player_name=name).encode(), CHANNEL_RELIABLE)
 
     def send_ready(self, ready: bool) -> None:
+        """Notify the server of this player's ready state in the lobby.
+
+        Parameters
+        ----------
+        ready : bool
+            True if the player is ready to start, False otherwise.
+        """
         self._transport.send(ReadyMsg(ready=ready).encode(), CHANNEL_RELIABLE)
 
     def send_colour(self, colour_rgb: tuple[int, int, int]) -> None:
+        """Send the player's chosen colour to the server.
+
+        Parameters
+        ----------
+        colour_rgb : tuple[int, int, int]
+            The chosen colour as an (R, G, B) tuple.
+        """
         self._transport.send(ColourMsg(colour_rgb=colour_rgb).encode(), CHANNEL_RELIABLE)
 
     def send_rename(self, new_name: str) -> None:
+        """Record the player's new name and send a rename request to the server.
+
+        Parameters
+        ----------
+        new_name : str
+            The new name the player wishes to use.
+        """
         self._player_name = new_name
         self._transport.send(RenameMsg(new_name=new_name).encode(), CHANNEL_RELIABLE)
 
     def poll_messages(self) -> list[AnyMsg]:
+        """Drain and return all non-state messages received since the last poll.
+
+        Intended to be called once per frame from the main thread to pick
+        up lobby, game-over, and other discrete events queued by the net
+        thread (state updates are consumed separately via ``get_state``).
+
+        Returns
+        -------
+        list[AnyMsg]
+            The messages received since the previous call, in arrival order.
+        """
         msgs: list[AnyMsg] = []
         while self._message_queue:
             msgs.append(self._message_queue.popleft())
         return msgs
 
     def stop(self) -> None:
+        """Signal the net thread to stop and disconnect the transport."""
         self._running = False
         self._transport.disconnect()
 

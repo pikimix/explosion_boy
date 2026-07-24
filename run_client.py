@@ -14,6 +14,7 @@ from engine import user_prefs
 
 
 def main() -> None:
+    """Load user prefs, parse CLI arguments, build the client and window, and run the app."""
     prefs = user_prefs.load()
 
     parser = argparse.ArgumentParser(description="Explosion Boy client")

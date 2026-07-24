@@ -32,6 +32,25 @@ _SLIDER_Y_OFFSETS = [48, -10]
 
 
 class PauseMenuScene:
+    """In-game pause menu overlay with volume sliders and a resume button.
+
+    Draws a dimmed overlay and panel on top of the (still-updating)
+    background scene, letting the player drag sliders to adjust the
+    music and sound-effect volume, and resume play via the Resume
+    button or the Escape key.
+
+    Parameters
+    ----------
+    background_scene : object
+        The scene running underneath the pause menu; it keeps being
+        updated and drawn while paused.
+    scene_manager : object
+        Manager used to pop this pause scene off the stack on resume.
+    sound_system : object
+        Object exposing the ``music_volume`` and ``sfx_volume``
+        properties that the sliders read from and write to.
+    """
+
     def __init__(self, background_scene, scene_manager, sound_system) -> None:  # type: ignore[type-arg]
         self._background = background_scene
         self._scene_manager = scene_manager
@@ -76,8 +95,8 @@ class PauseMenuScene:
         if self._title_text is not None:
             return
 
-        cx, cy = win.width / 2, win.height / 2
-        pl, pb, pr, pt = self._panel_bounds(win)
+        cx = win.width / 2
+        pl, pb, _, pt = self._panel_bounds(win)
         sl = self._slider_left(win)
         label_x = pl + 18
 
@@ -114,15 +133,22 @@ class PauseMenuScene:
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def update(self, dt: float) -> None:
+        """Advance the underlying background scene while the game is paused.
+
+        Parameters
+        ----------
+        dt : float
+            Time elapsed, in seconds, since the previous update.
+        """
         self._background.update(dt)
 
     def draw(self) -> None:
+        """Draw the background scene, dimmed overlay, panel, sliders, and resume button."""
         self._background.draw()
 
         win = arcade.get_window()
         self._ensure_texts(win)
-        cx, cy = win.width / 2, win.height / 2
-        pl, pb, pr, pt = self._panel_bounds(win)
+        pl, pb, _, _ = self._panel_bounds(win)
 
         # Full-screen dim
         arcade.draw_rect_filled(arcade.LBWH(0, 0, win.width, win.height), _OVERLAY_COLOUR)
@@ -172,13 +198,19 @@ class PauseMenuScene:
     # ── Input ─────────────────────────────────────────────────────────────────
 
     def on_key_press(self, key: int, modifiers: int) -> None:
+        """Resume gameplay by popping this scene when Escape is pressed."""
         if key == arcade.key.ESCAPE:
             self._scene_manager.pop()
 
     def on_key_release(self, key: int, modifiers: int) -> None:
-        pass
+        """Handle key-release events (no-op; required by the arcade scene interface)."""
 
     def on_mouse_press(self, x: float, y: float, button: int, modifiers: int) -> None:
+        """Resume the game or start dragging a slider on left click.
+
+        Pops this scene if the click lands on the resume button, or
+        begins dragging whichever volume slider handle was clicked.
+        """
         win = arcade.get_window()
 
         bl, bb, br, bt = self._btn_bounds(win)
@@ -196,13 +228,16 @@ class PauseMenuScene:
 
     def on_mouse_drag(self, x: float, y: float, dx: float, dy: float,
                       buttons: int, modifiers: int) -> None:
+        """Update the volume of the slider currently being dragged, if any."""
         if self._dragging is not None:
             self._apply_drag(self._dragging, x, arcade.get_window())
 
     def on_mouse_release(self, x: float, y: float, button: int, modifiers: int) -> None:
+        """Stop dragging a volume slider when the mouse button is released."""
         self._dragging = None
 
     def on_mouse_motion(self, x: float, y: float, dx: float, dy: float) -> None:
+        """Track whether the cursor is hovering the resume button, for highlighting."""
         win = arcade.get_window()
         bl, bb, br, bt = self._btn_bounds(win)
         self._resume_hovered = bl <= x <= br and bb <= y <= bt
@@ -212,7 +247,7 @@ class PauseMenuScene:
         value = round(self._value_from_x(x, sl), 2)
         if idx == 0:
             self._sounds.music_volume = value
-            user_prefs.set('music_volume', value)
+            user_prefs.set_pref('music_volume', value)
         else:
             self._sounds.sfx_volume = value
-            user_prefs.set('sfx_volume', value)
+            user_prefs.set_pref('sfx_volume', value)

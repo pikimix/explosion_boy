@@ -14,9 +14,16 @@ _hint_label: arcade.Text | None = None
 
 
 def draw(volume: float) -> None:
+    """Draw the volume bar and its labels at the bottom-left of the screen.
+
+    Parameters
+    ----------
+    volume : float
+        Current volume level in the range 0.0-1.0, used to fill the bar
+        and to display the percentage label.
+    """
     global _volume_label, _hint_label
     bar_left = _PADDING
-    bar_right = bar_left + _BAR_W
     bar_cx = bar_left + _BAR_W / 2
     bar_y = _PADDING + _BAR_H / 2
 

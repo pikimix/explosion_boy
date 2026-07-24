@@ -7,12 +7,21 @@ from engine.config import TARGET_FPS, WINDOW_H, WINDOW_TITLE, WINDOW_W
 
 
 class GameWindow(arcade.Window):
+    """arcade.Window subclass that owns the main loop and delegates to a SceneManager."""
+
     def __init__(self) -> None:
         super().__init__(WINDOW_W, WINDOW_H, WINDOW_TITLE,
                          update_rate=1 / TARGET_FPS, resizable=True)
         self._scene_manager: "SceneManager | None" = None  # set after import
 
     def set_scene_manager(self, manager: "SceneManager") -> None:  # type: ignore[name-defined]
+        """Attach the SceneManager that this window forwards events and updates to.
+
+        Parameters
+        ----------
+        manager : SceneManager
+            The scene manager to receive update, draw, and input callbacks.
+        """
         self._scene_manager = manager
 
     def on_update(self, delta_time: float) -> None:

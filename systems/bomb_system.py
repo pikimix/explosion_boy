@@ -11,6 +11,8 @@ from engine.physics import PhysicsSpace
 
 @dataclass
 class DetonationEvent:
+    """Describe a bomb that has finished its fuse and must detonate."""
+
     bomb_idx: int
     col: int
     row: int
@@ -27,6 +29,24 @@ def apply_new_bombs(
     space: PhysicsSpace,
     inputs: list[PlayerInput],
 ) -> None:
+    """Place a new bomb for each input requesting one, subject to capacity.
+
+    Skips players who are unknown, at their bomb capacity, or standing on
+    a physics-unmapped tile, and skips placement on a cell that already
+    holds a bomb.
+
+    Parameters
+    ----------
+    state : GameState
+        Current game state; new bombs are appended to `state.bombs` and
+        the placing player's `bombs_in_use` and pending bomb-type flags
+        are updated.
+    space : PhysicsSpace
+        Physics space to register the new bomb bodies with.
+    inputs : list[PlayerInput]
+        Per-player inputs for this tick; only those with `place_bomb`
+        set are considered.
+    """
     bomb_cells: set[tuple[int, int]] = {(b.col, b.row) for b in state.bombs}
     for inp in inputs:
         if not inp.place_bomb:
@@ -94,6 +114,19 @@ def sync_pushed_bombs(state: GameState, space: PhysicsSpace) -> None:
 
 
 def process_fuses(state: GameState) -> list[DetonationEvent]:
+    """Count down every bomb's fuse and collect those that have expired.
+
+    Parameters
+    ----------
+    state : GameState
+        Current game state; each bomb's `fuse_ticks_remaining` is
+        decremented in place.
+
+    Returns
+    -------
+    list[DetonationEvent]
+        One event per bomb whose fuse has reached zero, in bomb order.
+    """
     detonations: list[DetonationEvent] = []
     for i, bomb in enumerate(state.bombs):
         bomb.fuse_ticks_remaining -= 1
