@@ -11,11 +11,12 @@ from net.client import GameClient
 from engine.config import DEFAULT_PORT
 from engine.transport import make_client_transport
 from engine.window import GameWindow
-from engine import user_prefs
+from engine import gl_log_filter, user_prefs
 
 
 def main() -> None:
     """Load user prefs, parse CLI arguments, build the client and window, and run the app."""
+    gl_log_filter.install()
     prefs = user_prefs.load()
 
     parser = argparse.ArgumentParser(description="Explosion Boy client")
