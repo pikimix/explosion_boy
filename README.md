@@ -150,3 +150,61 @@ Once the server is running in Docker, connect clients on the same machine or net
 ```bash
 uv run python run_client.py --host 127.0.0.1 --port 9000 --name Alice
 ```
+
+## Profiling
+
+Two independent tools are available for investigating server performance. They don't depend on each other — use either one alone, or both together.
+
+### Tick-timing stats
+
+Pass `--profile` (or set `SERVER_PROFILE=1`) to have the server print a summary line to its log roughly once a second:
+
+```bash
+uv run python run_server.py --profile
+# or, with Docker Compose, set SERVER_PROFILE=1 in .env and:
+docker compose up -d
+docker compose logs -f server
+```
+
+```
+[12:03:45.123] [profile] tick avg=1.42ms max=8.91ms detonation_avg=0.67ms encode_avg=0.31ms | players=16 bombs=47 explosions=12 rays=8
+```
+
+This is cheap, always-safe-to-leave-on instrumentation baked into the code — it doesn't require py-spy, ptrace, or any container capability.
+
+### Flamegraph profiling with py-spy
+
+`py-spy` is a sampling profiler that attaches to a running process from outside — no code changes or `--profile` flag required, and it works whether or not `SERVER_PROFILE` is enabled. It's included as a regular project dependency, so it's already present in the Docker image and in your local `uv` environment, and the same commands work for profiling the client as well as the server.
+
+Recording is started and stopped on demand — attach whenever you like, and press `Ctrl-C` to stop; `py-spy record` catches the interrupt and writes out everything it sampled before exiting, so there's no need to know the recording length in advance.
+
+#### In Docker
+
+Running it against a containerised server requires the `SYS_PTRACE` capability, since Docker's default seccomp profile blocks the `ptrace` syscall py-spy needs. `docker-compose.yml` already grants this (`cap_add: [SYS_PTRACE]`); if you run the image with plain `docker run` instead, add `--cap-add=SYS_PTRACE` to the command.
+
+Useful if the server has already been running for a while (e.g. through several games) and you only want to capture one specific match:
+
+```bash
+docker exec -it <container> ps aux | grep run_server.py   # find the PID
+docker exec -it <container> uv run py-spy record -o /app/profiles/match-N.svg --pid <PID> --nonblocking --rate 100
+```
+
+The `uv run` prefix is needed because `py-spy` lives in the project's virtual environment, not on the container's default `PATH` — `uv run` resolves and activates it from `/app` (the container's working directory). The resulting `match-N.svg` appears directly in `./profiles/` on the host (bind-mounted into the container automatically); open it in a browser.
+
+#### Running directly (no Docker) — server or client
+
+The same technique works for a server or client started with `uv run python run_server.py` / `uv run python run_client.py` — find its PID, then attach:
+
+```bash
+ps aux | grep run_server.py   # or run_client.py
+uv run py-spy record -o profile.svg --pid <PID> --nonblocking --rate 100
+```
+
+You can also use `py-spy top --pid <PID>` for a live view instead of recording to a file, or `py-spy dump --pid <PID>` for a one-off stack snapshot.
+
+Platform notes:
+- **macOS** requires root to attach to another process. Resolve the venv's `py-spy` first, then `sudo` that specific path (plain `sudo uv run py-spy ...` won't work reliably, since `sudo` resets the environment `uv` needs):
+  ```bash
+  sudo "$(uv run which py-spy)" record -o profile.svg --pid <PID> --nonblocking --rate 100
+  ```
+- **Linux** may also require `sudo`, depending on the kernel's `ptrace_scope` setting (`/proc/sys/kernel/yama/ptrace_scope`) — if attaching fails with a permissions error, prefix the command with `sudo` the same way.

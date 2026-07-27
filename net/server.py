@@ -5,6 +5,7 @@ Run via: python run_server.py
 """
 from __future__ import annotations
 
+import time
 from datetime import datetime
 from uuid import UUID
 
@@ -68,9 +69,16 @@ class GameServer:
         tick_rate: int = 60,
         rollback_buffer_size: int = 120,
         debug: bool = False,
+        profile: bool = False,
     ) -> None:
         self._transport = transport
         self._debug = debug
+        self._profile = profile
+        self._profile_tick_count = 0
+        self._profile_total_ms = 0.0
+        self._profile_detonation_ms = 0.0
+        self._profile_encode_ms = 0.0
+        self._profile_max_tick_ms = 0.0
         self._tick_rate = tick_rate
         self._tick_dt = 1.0 / tick_rate
         self._rollback_buffer_size = rollback_buffer_size
@@ -234,6 +242,8 @@ class GameServer:
         assert self._state is not None
         assert self._space is not None
 
+        tick_start = time.perf_counter() if self._profile else 0.0
+
         self._last_alive_pids = set(self._state.players.keys())
         self._last_player_physics = dict(self._state.player_physics)
         self._last_player_colours = dict(self._state.player_colours)
@@ -247,7 +257,10 @@ class GameServer:
         if self._state is None:
             return
 
+        encode_start = time.perf_counter() if self._profile else 0.0
         state_bytes = encode_state(self._state)
+        if self._profile:
+            self._profile_encode_ms += (time.perf_counter() - encode_start) * 1000
         self._snapshots[tick] = state_bytes
 
         # Evict entries outside the rollback window
@@ -259,6 +272,37 @@ class GameServer:
             StateUpdateMsg(tick=tick, state_bytes=state_bytes).encode(),
             CHANNEL_UNRELIABLE,
         )
+
+        if self._profile:
+            self._record_profile_sample(tick_start)
+
+    def _record_profile_sample(self, tick_start: float) -> None:
+        """Accumulate per-tick timing and print a summary roughly once a second."""
+        tick_ms = (time.perf_counter() - tick_start) * 1000
+        self._profile_tick_count += 1
+        self._profile_total_ms += tick_ms
+        self._profile_max_tick_ms = max(self._profile_max_tick_ms, tick_ms)
+
+        if self._profile_tick_count < self._tick_rate:
+            return
+
+        assert self._state is not None
+        n = self._profile_tick_count
+        print(
+            f"[{_ts()}] [profile] tick avg={self._profile_total_ms / n:.2f}ms "
+            f"max={self._profile_max_tick_ms:.2f}ms "
+            f"detonation_avg={self._profile_detonation_ms / n:.2f}ms "
+            f"encode_avg={self._profile_encode_ms / n:.2f}ms | "
+            f"players={len(self._state.players)} "
+            f"bombs={len(self._state.bombs)} "
+            f"explosions={len(self._state.explosions)} "
+            f"rays={len(self._state.explosion_rays)}"
+        )
+        self._profile_tick_count = 0
+        self._profile_total_ms = 0.0
+        self._profile_detonation_ms = 0.0
+        self._profile_encode_ms = 0.0
+        self._profile_max_tick_ms = 0.0
 
     def _run_tick(self, tick: int, inputs: list[PlayerInput]) -> None:
         """Execute one tick of game logic with the given inputs.
@@ -277,7 +321,10 @@ class GameServer:
         apply_new_bombs(self._state, self._space, inputs)
         sync_pushed_bombs(self._state, self._space)
         detonations = process_fuses(self._state)
+        det_start = time.perf_counter() if self._profile else 0.0
         process_detonations(self._state, self._space, detonations, self._bus)
+        if self._profile:
+            self._profile_detonation_ms += (time.perf_counter() - det_start) * 1000
         if self._state is None:
             return
         process_powerup_pickups(self._state)

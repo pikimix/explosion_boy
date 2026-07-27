@@ -7,4 +7,11 @@ services:
       SERVER_HOST: ${SERVER_HOST:-0.0.0.0}
       SERVER_PORT: ${SERVER_PORT:-9000}
       SERVER_BACKEND: ${SERVER_BACKEND:-tcp}
+      SERVER_PROFILE: ${SERVER_PROFILE:-0}
+    volumes:
+      - ./profiles:/app/profiles
     restart: unless-stopped
+    # SYS_PTRACE lets py-spy attach to the server process from inside the
+    # container for ad-hoc `docker exec ... py-spy ...` profiling sessions.
+    cap_add:
+      - SYS_PTRACE

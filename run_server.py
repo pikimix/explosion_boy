@@ -21,6 +21,10 @@ def main() -> None:
                         help=f"Number of ticks to keep for rollback (default: {ROLLBACK_BUFFER_SIZE})")
     parser.add_argument("--debug", action="store_true",
                         help="Print input-buffer diagnostics each second")
+    parser.add_argument("--profile", action="store_true",
+                        default=os.environ.get("SERVER_PROFILE", "").lower() in ("1", "true", "yes"),
+                        help="Print per-second tick timing and entity-count stats "
+                             "(also enabled via SERVER_PROFILE=1)")
     args = parser.parse_args()
 
     transport = make_server_transport(
@@ -32,6 +36,7 @@ def main() -> None:
         tick_rate=args.tick_rate,
         rollback_buffer_size=args.rollback_buffer,
         debug=args.debug,
+        profile=args.profile,
     ).run()
 
 
