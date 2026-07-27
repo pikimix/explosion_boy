@@ -65,12 +65,21 @@ def process_detonations(
         Event bus used to emit detonation, soft-block-destroyed, and
         player-died events.
     """
+    if detonations:
+        # New explosions/rays are about to be added — the cached lit-cell
+        # set from _kill_players_in_explosions is no longer valid.
+        state.lit_cells_dirty = True
+
     queue: deque[DetonationEvent] = deque(detonations)
     processed_indices: set[int] = set()
     cluster_origins: list[ClusterOrigin] = []
     bomb_by_cell: dict[Cell, int] = {
         Cell(b.col, b.row): bi for bi, b in enumerate(state.bombs)
     }
+    # Cells already given an ExplosionCenter this batch — overlapping blasts
+    # (chain reactions, adjacent super/rubble AOEs) would otherwise each
+    # append their own duplicate entry for the same cell.
+    lit_cells: set[Cell] = set()
 
     while queue:
         det = queue.popleft()
@@ -81,13 +90,15 @@ def process_detonations(
         bus.emit(BombDetonatedEvent(det.col, det.row))
 
         if det.is_rubble:
-            _rubble_bomb_explosion(state, space, det, bus, bomb_by_cell, queue, processed_indices)
+            _rubble_bomb_explosion(state, space, det, bus, bomb_by_cell, queue, processed_indices, lit_cells)
         elif det.is_super:
-            _super_bomb_explosion(state, space, det, bus, bomb_by_cell, queue, processed_indices)
+            _super_bomb_explosion(state, space, det, bus, bomb_by_cell, queue, processed_indices, lit_cells)
         else:
-            state.explosions.append(
-                ExplosionCenter(det.col, det.row, EXPLOSION_DURATION_TICKS)
-            )
+            if Cell(det.col, det.row) not in lit_cells:
+                lit_cells.add(Cell(det.col, det.row))
+                state.explosions.append(
+                    ExplosionCenter(det.col, det.row, EXPLOSION_DURATION_TICKS)
+                )
 
             for dc, dr in _DIRECTIONS:
                 ray_len = 0
@@ -160,6 +171,7 @@ def _super_bomb_explosion(
     bomb_by_cell: dict[Cell, int],
     queue: deque[DetonationEvent],
     processed_indices: set[int],
+    lit_cells: set[Cell],
 ) -> None:
     """AOE explosion scaled to half the owner's blast radius (min 5×5), passes through solid walls."""
     half = max(2, det.blast_radius // 2)
@@ -168,7 +180,10 @@ def _super_bomb_explosion(
             c, r = det.col + dc, det.row + dr
             if not (0 <= r < state.map_rows and 0 <= c < state.map_cols):
                 continue
-            state.explosions.append(ExplosionCenter(c, r, EXPLOSION_DURATION_TICKS))
+            cell = Cell(c, r)
+            if cell not in lit_cells:
+                lit_cells.add(cell)
+                state.explosions.append(ExplosionCenter(c, r, EXPLOSION_DURATION_TICKS))
             if state.tiles[r][c] == TileKind.SOFT_BLOCK:
                 state.tiles[r][c] = TileKind.EMPTY
                 state.tiles_dirty = True
@@ -193,6 +208,7 @@ def _rubble_bomb_explosion(
     bomb_by_cell: dict[Cell, int],
     queue: deque[DetonationEvent],
     processed_indices: set[int],
+    lit_cells: set[Cell],
 ) -> None:
     """AOE explosion like super bomb, then scatters soft blocks on empty cells (1-in-5 chance).
 
@@ -207,8 +223,11 @@ def _rubble_bomb_explosion(
             c, r = det.col + dc, det.row + dr
             if not (0 <= r < state.map_rows and 0 <= c < state.map_cols):
                 continue
-            affected.append(Cell(c, r))
-            state.explosions.append(ExplosionCenter(c, r, EXPLOSION_DURATION_TICKS))
+            cell = Cell(c, r)
+            affected.append(cell)
+            if cell not in lit_cells:
+                lit_cells.add(cell)
+                state.explosions.append(ExplosionCenter(c, r, EXPLOSION_DURATION_TICKS))
             if state.tiles[r][c] == TileKind.SOFT_BLOCK:
                 state.tiles[r][c] = TileKind.EMPTY
                 state.tiles_dirty = True
@@ -285,6 +304,7 @@ def _spawn_cluster_sub_bombs(
 
 def tick_explosions(state: GameState) -> None:
     """Age all active explosions. Player kills are handled by process_detonations."""
+    prev_count = len(state.explosions) + len(state.explosion_rays)
     state.explosions = [
         e for e in state.explosions
         if _tick_and_keep(e)
@@ -293,6 +313,9 @@ def tick_explosions(state: GameState) -> None:
         r for r in state.explosion_rays
         if _tick_and_keep(r)
     ]
+    if len(state.explosions) + len(state.explosion_rays) != prev_count:
+        # Something aged out — the cached lit-cell set no longer matches.
+        state.lit_cells_dirty = True
 
 
 def _tick_and_keep(obj) -> bool:
@@ -301,11 +324,16 @@ def _tick_and_keep(obj) -> bool:
 
 
 def _kill_players_in_explosions(state: GameState, bus: EventBus) -> None:
-    lit: set[Cell] = {Cell(e.col, e.row) for e in state.explosions}
-    for ray in state.explosion_rays:
-        dc, dr = ray.direction
-        for i in range(1, ray.length + 1):
-            lit.add(Cell(ray.origin_col + dc * i, ray.origin_row + dr * i))
+    if state.lit_cells_dirty or state.lit_cells_cache is None:
+        lit: set[Cell] = {Cell(e.col, e.row) for e in state.explosions}
+        for ray in state.explosion_rays:
+            dc, dr = ray.direction
+            for i in range(1, ray.length + 1):
+                lit.add(Cell(ray.origin_col + dc * i, ray.origin_row + dr * i))
+        state.lit_cells_cache = lit
+        state.lit_cells_dirty = False
+    else:
+        lit = state.lit_cells_cache
 
     dead: list[int] = []
     for pid, phys in state.player_physics.items():

@@ -63,3 +63,11 @@ class GameState:
     tile_list_cache: list[list[int]] | None = field(
         default=None, repr=False, compare=False, init=False
     )
+
+    # Set whenever explosions/explosion_rays are added or aged out; lets
+    # _kill_players_in_explosions reuse its lit-cell set across ticks where
+    # the active explosion batch hasn't changed.
+    lit_cells_dirty: bool = field(default=True, repr=False, compare=False)
+    lit_cells_cache: set | None = field(
+        default=None, repr=False, compare=False, init=False
+    )

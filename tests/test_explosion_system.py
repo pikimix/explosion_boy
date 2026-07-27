@@ -1,11 +1,12 @@
 """Tests for detonation dispatch and cluster/super/rubble powerup combinations."""
 
-from core.components import BombComponent, TileKind
+from core.components import BombComponent, Cell, PhysicsState, PlayerStats, TileKind
 from core.state import GameState
+from engine.config import TILE_SIZE
 from engine.physics import PhysicsSpace
 from systems.bomb_system import DetonationEvent
 from systems.event_bus import EventBus
-from systems.explosion_system import process_detonations
+from systems.explosion_system import process_detonations, tick_explosions
 
 
 def _make_empty_state(cols: int = 15, rows: int = 15) -> GameState:
@@ -100,6 +101,270 @@ def test_rubble_alone_uses_half_radius() -> None:
     lit = {(e.col, e.row) for e in state.explosions}
     assert (5, 7) in lit
     assert (3, 7) not in lit
+
+
+def test_overlapping_super_bombs_dedupe_explosion_centers() -> None:
+    state = _make_empty_state()
+    space = _make_space(state)
+    # blast_radius=4 -> half=2, so each bomb covers a 5x5 box.
+    # bomb0 at col 5 covers cols 3..7; bomb1 at col 7 covers cols 5..9 -> overlap cols 5..7.
+    bombs = [
+        BombComponent(owner_id=0, fuse_ticks_remaining=1, blast_radius=4,
+                      col=5, row=7, px=0, py=0, is_super=True),
+        BombComponent(owner_id=1, fuse_ticks_remaining=1, blast_radius=4,
+                      col=7, row=7, px=0, py=0, is_super=True),
+    ]
+    for i, b in enumerate(bombs):
+        state.bombs.append(b)
+        space.add_bomb(i, b.px, b.py)
+
+    dets = [
+        DetonationEvent(bomb_idx=0, col=5, row=7, blast_radius=4, owner_id=0, is_super=True),
+        DetonationEvent(bomb_idx=1, col=7, row=7, blast_radius=4, owner_id=1, is_super=True),
+    ]
+    process_detonations(state, space, dets, EventBus())
+
+    cells = [(e.col, e.row) for e in state.explosions]
+    # No cell should have more than one ExplosionCenter, even though both
+    # bombs' 5x5 AOE boxes overlap over a 3x5 region.
+    assert len(cells) == len(set(cells))
+    # 25 + 25 - 15 (overlap) = 35 distinct cells; without dedup this would be 50.
+    assert len(cells) == 35
+
+
+def test_overlapping_super_bombs_still_destroy_softblocks_in_overlap() -> None:
+    state = _make_empty_state()
+    space = _make_space(state)
+    # Soft block placed inside the overlap region shared by both bombs.
+    state.tiles[7][6] = TileKind.SOFT_BLOCK
+    space.rebuild_static_walls(state.tiles)
+
+    bombs = [
+        BombComponent(owner_id=0, fuse_ticks_remaining=1, blast_radius=4,
+                      col=5, row=7, px=0, py=0, is_super=True),
+        BombComponent(owner_id=1, fuse_ticks_remaining=1, blast_radius=4,
+                      col=7, row=7, px=0, py=0, is_super=True),
+    ]
+    for i, b in enumerate(bombs):
+        state.bombs.append(b)
+        space.add_bomb(i, b.px, b.py)
+
+    dets = [
+        DetonationEvent(bomb_idx=0, col=5, row=7, blast_radius=4, owner_id=0, is_super=True),
+        DetonationEvent(bomb_idx=1, col=7, row=7, blast_radius=4, owner_id=1, is_super=True),
+    ]
+    process_detonations(state, space, dets, EventBus())
+
+    assert state.tiles[7][6] == TileKind.EMPTY
+    assert (6, 7) in {(e.col, e.row) for e in state.explosions}
+
+
+def test_non_overlapping_bombs_each_keep_their_own_explosion_centers() -> None:
+    state = _make_empty_state()
+    space = _make_space(state)
+    bomb = BombComponent(
+        owner_id=0, fuse_ticks_remaining=1, blast_radius=2,
+        col=2, row=2, px=0, py=0,
+    )
+    other = BombComponent(
+        owner_id=1, fuse_ticks_remaining=1, blast_radius=2,
+        col=12, row=12, px=0, py=0,
+    )
+    state.bombs.extend([bomb, other])
+    space.add_bomb(0, bomb.px, bomb.py)
+    space.add_bomb(1, other.px, other.py)
+
+    dets = [
+        DetonationEvent(bomb_idx=0, col=2, row=2, blast_radius=2, owner_id=0),
+        DetonationEvent(bomb_idx=1, col=12, row=12, blast_radius=2, owner_id=1),
+    ]
+    process_detonations(state, space, dets, EventBus())
+
+    cells = {(e.col, e.row) for e in state.explosions}
+    assert (2, 2) in cells
+    assert (12, 12) in cells
+    assert len(cells) == 2
+
+
+def _add_player(state: GameState, pid: int, col: int, row: int) -> None:
+    state.players[pid] = PlayerStats(player_id=pid)
+    state.player_physics[pid] = PhysicsState(
+        x=col * TILE_SIZE + TILE_SIZE / 2,
+        y=row * TILE_SIZE + TILE_SIZE / 2,
+    )
+
+
+def test_lit_cells_cache_reused_across_unchanged_ticks() -> None:
+    state = _make_empty_state()
+    space = _make_space(state)
+    bomb = BombComponent(owner_id=0, fuse_ticks_remaining=1, blast_radius=3,
+                         col=5, row=5, px=0, py=0)
+    state.bombs.append(bomb)
+    space.add_bomb(0, bomb.px, bomb.py)
+
+    det = DetonationEvent(bomb_idx=0, col=5, row=5, blast_radius=3, owner_id=0)
+    process_detonations(state, space, [det], EventBus())
+
+    assert state.lit_cells_dirty is False
+    cache_after_detonation = state.lit_cells_cache
+    assert cache_after_detonation is not None
+
+    # A tick where nothing expires and nothing new detonates: dirty stays
+    # False and the same cached set object is reused, not rebuilt.
+    tick_explosions(state)
+    assert state.lit_cells_dirty is False
+    process_detonations(state, space, [], EventBus())
+    assert state.lit_cells_cache is cache_after_detonation
+
+
+def test_lit_cells_cache_invalidated_on_new_detonation() -> None:
+    state = _make_empty_state()
+    space = _make_space(state)
+    bomb = BombComponent(owner_id=0, fuse_ticks_remaining=1, blast_radius=2,
+                         col=2, row=2, px=0, py=0)
+    state.bombs.append(bomb)
+    space.add_bomb(0, bomb.px, bomb.py)
+    process_detonations(
+        state, space,
+        [DetonationEvent(bomb_idx=0, col=2, row=2, blast_radius=2, owner_id=0)],
+        EventBus(),
+    )
+    first_cache = state.lit_cells_cache
+    assert Cell(2, 2) in first_cache
+
+    other = BombComponent(owner_id=1, fuse_ticks_remaining=1, blast_radius=2,
+                          col=12, row=12, px=0, py=0)
+    state.bombs.append(other)
+    space.add_bomb(1, other.px, other.py)
+    process_detonations(
+        state, space,
+        [DetonationEvent(bomb_idx=1, col=12, row=12, blast_radius=2, owner_id=1)],
+        EventBus(),
+    )
+
+    assert state.lit_cells_dirty is False
+    assert state.lit_cells_cache is not first_cache
+    assert Cell(2, 2) in state.lit_cells_cache
+    assert Cell(12, 12) in state.lit_cells_cache
+
+
+def test_lit_cells_cache_invalidated_when_explosion_expires() -> None:
+    state = _make_empty_state()
+    space = _make_space(state)
+    bomb = BombComponent(owner_id=0, fuse_ticks_remaining=1, blast_radius=2,
+                         col=5, row=5, px=0, py=0)
+    state.bombs.append(bomb)
+    space.add_bomb(0, bomb.px, bomb.py)
+    process_detonations(
+        state, space,
+        [DetonationEvent(bomb_idx=0, col=5, row=5, blast_radius=2, owner_id=0)],
+        EventBus(),
+    )
+    assert state.lit_cells_dirty is False
+
+    # Age every active explosion/ray past its ticks_remaining so it's removed.
+    for e in state.explosions:
+        e.ticks_remaining = 1
+    for r in state.explosion_rays:
+        r.ticks_remaining = 1
+    tick_explosions(state)
+
+    assert state.explosions == []
+    assert state.explosion_rays == []
+    assert state.lit_cells_dirty is True
+
+
+def test_cached_lit_cells_still_detect_player_who_moves_into_blast() -> None:
+    """The cache stores which cells are lit, not which players are dead —
+
+    a player who steps into an already-active blast on a later, otherwise
+    unchanged tick must still be killed."""
+    state = _make_empty_state()
+    space = _make_space(state)
+    bomb = BombComponent(owner_id=0, fuse_ticks_remaining=1, blast_radius=3,
+                         col=5, row=5, px=0, py=0)
+    state.bombs.append(bomb)
+    space.add_bomb(0, bomb.px, bomb.py)
+
+    det = DetonationEvent(bomb_idx=0, col=5, row=5, blast_radius=3, owner_id=0)
+    process_detonations(state, space, [det], EventBus())
+    assert state.lit_cells_dirty is False
+
+    # Player steps into the still-active blast cell on a later tick where
+    # nothing about the explosion batch itself changes (cache is reused).
+    _add_player(state, pid=1, col=5, row=5)
+    tick_explosions(state)
+    assert state.lit_cells_dirty is False
+    process_detonations(state, space, [], EventBus())
+
+    assert 1 not in state.players
+    assert 1 not in state.player_physics
+
+
+def test_crossing_normal_bomb_rays_are_not_deduped() -> None:
+    """Two normal bombs whose rays cross the same cell each keep their own ray
+
+    (they're distinct blast lines from distinct origins, not duplicate data)."""
+    state = _make_empty_state()
+    space = _make_space(state)
+    bombs = [
+        BombComponent(owner_id=0, fuse_ticks_remaining=1, blast_radius=3,
+                      col=5, row=5, px=0, py=0),
+        BombComponent(owner_id=1, fuse_ticks_remaining=1, blast_radius=3,
+                      col=7, row=2, px=0, py=0),
+    ]
+    for i, b in enumerate(bombs):
+        state.bombs.append(b)
+        space.add_bomb(i, b.px, b.py)
+
+    dets = [
+        DetonationEvent(bomb_idx=0, col=5, row=5, blast_radius=3, owner_id=0),
+        DetonationEvent(bomb_idx=1, col=7, row=2, blast_radius=3, owner_id=1),
+    ]
+    process_detonations(state, space, dets, EventBus())
+
+    # bomb0's rightward ray and bomb1's downward ray both cross (7, 5).
+    lit: set[tuple[int, int]] = set()
+    for ray in state.explosion_rays:
+        dc, dr = ray.direction
+        for i in range(1, ray.length + 1):
+            lit.add((ray.origin_col + dc * i, ray.origin_row + dr * i))
+    assert (7, 5) in lit
+
+    origins = {(r.origin_col, r.origin_row) for r in state.explosion_rays}
+    assert (5, 5) in origins and (7, 2) in origins
+    # Both bombs' own origins get an ExplosionCenter, and they're distinct.
+    assert {(e.col, e.row) for e in state.explosions} == {(5, 5), (7, 2)}
+
+
+def test_chain_triggered_normal_bomb_inside_super_aoe_dedupes_origin() -> None:
+    """A normal bomb chain-triggered from inside a super bomb's already-lit AOE
+
+    doesn't get a second ExplosionCenter at the same cell."""
+    state = _make_empty_state()
+    space = _make_space(state)
+    # Super bomb at (5,5), blast_radius=4 -> half=2, covers cols 3..7, rows 3..7.
+    super_bomb = BombComponent(
+        owner_id=0, fuse_ticks_remaining=1, blast_radius=4,
+        col=5, row=5, px=0, py=0, is_super=True,
+    )
+    # Normal bomb sitting inside that AOE, chain-triggered rather than detonated directly.
+    inner_bomb = BombComponent(
+        owner_id=1, fuse_ticks_remaining=1, blast_radius=2,
+        col=6, row=5, px=0, py=0,
+    )
+    state.bombs.extend([super_bomb, inner_bomb])
+    space.add_bomb(0, super_bomb.px, super_bomb.py)
+    space.add_bomb(1, inner_bomb.px, inner_bomb.py)
+
+    dets = [
+        DetonationEvent(bomb_idx=0, col=5, row=5, blast_radius=4, owner_id=0, is_super=True),
+    ]
+    process_detonations(state, space, dets, EventBus())
+
+    cells = [(e.col, e.row) for e in state.explosions]
+    assert cells.count((6, 5)) == 1
+    assert len(cells) == len(set(cells))
 
 
 def test_rubble_combined_with_super_uses_full_radius() -> None:
