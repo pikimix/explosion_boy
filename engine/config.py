@@ -26,6 +26,13 @@ DEFAULT_BLAST_RADIUS = 2
 EXPLOSION_DURATION_TICKS = round(EXPLOSION_DURATION_SECONDS * TICK_RATE)  # 30 at 60 tps
 SOFT_BLOCK_DROP_CHANCE = 0.25
 
+# ── Super bomb shockwave (client-side post-processing effect) ────────────────
+SHOCKWAVE_LIFETIME_SECONDS =  0.5     # total effect duration: travel + dissipate
+SHOCKWAVE_TRAVEL_FRACTION = 0.5        # share of the lifetime spent travelling out to the blast radius at full strength
+SHOCKWAVE_RING_WIDTH = 0.012         # width of the sharp leading edge, in screen-height-normalised units
+SHOCKWAVE_TRAIL_LENGTH = 0.05        # how far the distortion trails behind the front, same units
+SHOCKWAVE_DISTORTION_STRENGTH = 0.035  # peak UV displacement at the leading edge
+
 # ── Perimeter shrink ───────────────────────────────────────────────────────────
 SHRINK_TRIGGER_SECONDS = 300.0                                    # 5 minutes
 SHRINK_INTERVAL_SECONDS = 30.0                                    # time between ring closures

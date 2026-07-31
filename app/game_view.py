@@ -16,6 +16,7 @@ import arcade.camera
 from arcade.sprite.animated import TextureKeyframe
 
 from app.particle_system import ExplosionParticleSystem
+from app.shockwave_system import ShockwaveSystem
 from app.ui import hud, speed_widget
 from app.ui.hud import HUD_WIDTH
 from core.components import PowerupKind, TileKind
@@ -60,6 +61,7 @@ class GameView:
         self._anim_last_time: float = 0.0
         self._last_frame_time: float = 0.0
         self._particles = ExplosionParticleSystem()
+        self._shockwaves = ShockwaveSystem()
         self._bomb_texts: dict[str, arcade.Text] = {
             emoji: arcade.Text(
                 emoji, 0, 0,
@@ -147,18 +149,40 @@ class GameView:
         dt = now - self._last_frame_time if self._last_frame_time else 0.0
         self._last_frame_time = now
 
-        with self._camera.activate():
-            self._draw_tiles(state)
-            self._draw_shrink_warning(state)
-            self._draw_powerups(state)
-            self._draw_bombs(state)
-            self._draw_explosions(state)
-            self._particles.update(dt, state)
-            self._particles.draw()
-            self._draw_players(state, local_player_id, predicted_x, predicted_y, predicted_vx, predicted_vy)
+        self._shockwaves.update(state)
+        fbo = self._shockwaves.begin_scene_capture(self._window_w, self._window_h)
+        if fbo is not None:
+            with fbo.activate():
+                fbo.clear()
+                with self._camera.activate():
+                    self._draw_scene(state, dt, local_player_id, predicted_x, predicted_y, predicted_vx, predicted_vy)
+            self._shockwaves.composite(self._camera)
+        else:
+            with self._camera.activate():
+                self._draw_scene(state, dt, local_player_id, predicted_x, predicted_y, predicted_vx, predicted_vy)
         hud.draw(state)
         if speed is not None:
             speed_widget.draw(speed)
+
+    def _draw_scene(
+        self,
+        state: GameState,
+        dt: float,
+        local_player_id: int | None,
+        predicted_x: float | None,
+        predicted_y: float | None,
+        predicted_vx: float | None,
+        predicted_vy: float | None,
+    ) -> None:
+        """Draw everything that a super-bomb shockwave should be able to warp."""
+        self._draw_tiles(state)
+        self._draw_shrink_warning(state)
+        self._draw_powerups(state)
+        self._draw_bombs(state)
+        self._draw_explosions(state)
+        self._particles.update(dt, state)
+        self._particles.draw()
+        self._draw_players(state, local_player_id, predicted_x, predicted_y, predicted_vx, predicted_vy)
 
     # ── Tiles ─────────────────────────────────────────────────────────────────
 
