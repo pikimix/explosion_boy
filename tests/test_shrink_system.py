@@ -118,6 +118,25 @@ def test_shrink_stops_once_spawn_size_target_reached_without_further_deaths():
     assert state.shrink_warn_ring == 0
 
 
+def test_death_driven_shrink_ignores_the_interval_cooldown():
+    """A death that raises the target beyond the closed ring starts the next
+    ring's warning immediately, even mid-cooldown from a stalemate-timer closure."""
+    state, space, bus, _died = _make_round(16)
+    state.tick = SHRINK_TRIGGER_TICKS
+    process_perimeter_shrink(state, space, bus)  # time-driven trigger, warn ring 1
+
+    for _ in range(SHRINK_WARN_TICKS):
+        state.tick += 1
+        process_perimeter_shrink(state, space, bus)
+    assert state.shrink_ring == 1
+    assert state.tick < state.shrink_next_warn_tick, "still mid-cooldown"
+
+    # A death now raises the target past ring 1.
+    state.shrink_target_ring = 3
+    process_perimeter_shrink(state, space, bus)
+    assert state.shrink_warn_ring == 2, "death-driven target must ignore the cooldown"
+
+
 def test_tiles_stay_passable_during_the_warning_window():
     """Ring tiles remain passable while the warning is active and have not yet closed."""
     state, space, bus, _died = _make_round(3)

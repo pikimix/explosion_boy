@@ -90,6 +90,11 @@ def process_perimeter_shrink(state: GameState, space: PhysicsSpace, bus: EventBu
     next ring. Closing a ring converts it to unbreakable wall, killing any
     players or bombs caught inside.
 
+    A death-driven target (shrink_target_ring ahead of shrink_ring) starts
+    the next ring's warning immediately, ignoring the cooldown between
+    closures — only the stalemate timer's own progression is paced by
+    SHRINK_INTERVAL_TICKS.
+
     Parameters
     ----------
     state : GameState
@@ -122,8 +127,10 @@ def process_perimeter_shrink(state: GameState, space: PhysicsSpace, bus: EventBu
     desired_ring = max(state.shrink_target_ring, _time_forced_ring(state.tick))
     if desired_ring <= state.shrink_ring:
         return
-    if state.shrink_active and state.tick < state.shrink_next_warn_tick:
-        return  # pace successive closures SHRINK_INTERVAL_TICKS apart
+
+    death_driven = state.shrink_target_ring > state.shrink_ring
+    if not death_driven and state.shrink_active and state.tick < state.shrink_next_warn_tick:
+        return  # pace non-death (stalemate timer) closures SHRINK_INTERVAL_TICKS apart
 
     next_ring = state.shrink_ring + 1
     if not _can_close_ring(state.map_cols, state.map_rows, next_ring):
