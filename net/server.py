@@ -53,7 +53,7 @@ from systems.powerup_system import (
     tick_status_effects,
     _LAST_2_SPAWN_INTERVAL,
 )
-from systems.shrink_system import process_perimeter_shrink
+from systems.shrink_system import process_perimeter_shrink, update_shrink_target
 
 
 def _ts() -> str:
@@ -207,6 +207,7 @@ class GameServer:
             if self._space:
                 self._space.remove_player(pid)
             self._input_buffer.unregister_player(pid)
+            update_shrink_target(self._state)
             self._check_win_condition()
 
     # ── Game start ────────────────────────────────────────────────────────────
@@ -414,6 +415,8 @@ class GameServer:
     # ── Win condition ─────────────────────────────────────────────────────────
 
     def _on_player_died(self, event: PlayerDiedEvent) -> None:
+        if self._state is not None:
+            update_shrink_target(self._state)
         self._check_win_condition()
 
     def _check_win_condition(self) -> None:

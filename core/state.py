@@ -42,13 +42,14 @@ class GameState:
     phase: GamePhase = GamePhase.LOBBY
     winner_id: int | None = None
 
-    # Set once at round start; used to guard the "2 players remaining" shrink
-    # trigger so a round that *starts* with 2 players doesn't shrink instantly.
+    # Set once at round start; informational only (round setup used it to size
+    # the initial grid via map_size_for_player_count).
     starting_player_count: int = 0
 
     # Perimeter shrink progress
     shrink_active: bool = False
     shrink_ring: int = 0                  # last CLOSED ring index (0 = none closed yet)
+    shrink_target_ring: int = 0           # ring shrink is currently working towards (see update_shrink_target)
     shrink_warn_ring: int = 0             # ring currently flashing/warning, 0 = none pending
     shrink_warn_ticks_remaining: int = 0  # counts down like BombComponent.fuse_ticks_remaining
     shrink_next_warn_tick: int = 0        # tick the next ring's warning phase begins

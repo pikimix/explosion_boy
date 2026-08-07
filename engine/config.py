@@ -39,7 +39,6 @@ SHRINK_INTERVAL_SECONDS = 30.0                                    # time between
 SHRINK_TRIGGER_TICKS = round(SHRINK_TRIGGER_SECONDS * TICK_RATE)  # 18000 at 60 tps
 SHRINK_INTERVAL_TICKS = round(SHRINK_INTERVAL_SECONDS * TICK_RATE)  # 1800 at 60 tps
 SHRINK_WARN_TICKS = BOMB_FUSE_TICKS       # rings flash for the same duration as a bomb fuse
-SHRINK_TRIGGER_PLAYER_COUNT = 2           # trigger once alive count drops to/below this
 SHRINK_MIN_INTERIOR_AXIS = 5              # stop permanently once a ring would leave less than this on either axis
 
 # ── Player-count-scaled starting grid ─────────────────────────────────────────

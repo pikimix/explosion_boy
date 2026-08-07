@@ -10,7 +10,7 @@ from engine.config import (
 )
 from engine.physics import PhysicsSpace
 from systems.event_bus import EventBus, PlayerDiedEvent
-from systems.shrink_system import process_perimeter_shrink
+from systems.shrink_system import process_perimeter_shrink, update_shrink_target
 from systems.world import generate_map, map_size_for_player_count, spawn_points_for_grid
 
 
@@ -45,8 +45,8 @@ def _make_round(num_players: int, seed: int = 1) -> tuple[GameState, PhysicsSpac
     return state, space, bus, died
 
 
-def test_shrink_does_not_trigger_before_timer_or_player_threshold():
-    """Shrink stays inactive before the trigger timer and above the player-count threshold."""
+def test_shrink_does_not_trigger_before_timer_with_no_deaths():
+    """Shrink stays inactive before the trigger timer while nobody has died."""
     state, space, bus, _died = _make_round(3)
     state.tick = SHRINK_TRIGGER_TICKS - 1
     process_perimeter_shrink(state, space, bus)
@@ -54,7 +54,8 @@ def test_shrink_does_not_trigger_before_timer_or_player_threshold():
 
 
 def test_shrink_triggers_on_timer_and_begins_warning_ring_one():
-    """Reaching the trigger tick activates shrink and starts the ring-1 warning countdown."""
+    """Reaching the trigger tick activates shrink and starts the ring-1 warning countdown,
+    even though nobody has died (the stalemate fallback)."""
     state, space, bus, _died = _make_round(3)
     state.tick = SHRINK_TRIGGER_TICKS
     process_perimeter_shrink(state, space, bus)
@@ -63,26 +64,58 @@ def test_shrink_triggers_on_timer_and_begins_warning_ring_one():
     assert state.shrink_warn_ticks_remaining == SHRINK_WARN_TICKS
 
 
-def test_shrink_triggers_immediately_when_dropping_to_two_players():
-    """Shrink activates immediately once the player count drops to two, regardless of the timer."""
+def test_shrink_triggers_immediately_on_death_towards_spawn_size_for_remaining_players():
+    """A death shrinks the map towards the spawn size for the players left, regardless of the timer."""
     state, space, bus, _died = _make_round(3)
     state.players.pop(2)
+    update_shrink_target(state)
     state.tick = 100  # well before the 5-minute timer
+
+    expected_side, _ = map_size_for_player_count(2)
+    expected_ring = (state.map_cols - expected_side) // 2
+    assert state.shrink_target_ring == expected_ring
+
     process_perimeter_shrink(state, space, bus)
     assert state.shrink_active
     assert state.shrink_warn_ring == 1
 
 
-def test_shrink_does_not_trigger_immediately_for_a_round_that_starts_with_two_players():
-    """A round starting with two players must wait for the timer, not shrink on tick one."""
+def test_shrink_does_not_trigger_without_a_death_or_the_timer():
+    """No deaths and no elapsed timer means no shrink target and no activity."""
     state, space, bus, _died = _make_round(2)
     state.tick = 100
     process_perimeter_shrink(state, space, bus)
-    assert not state.shrink_active, "a 2-player start must not shrink until the timer elapses"
+    assert not state.shrink_active, "no deaths yet, and well before the timer"
 
     state.tick = SHRINK_TRIGGER_TICKS
     process_perimeter_shrink(state, space, bus)
-    assert state.shrink_active, "the timer must still apply to a 2-player start"
+    assert state.shrink_active, "the stalemate timer must still apply"
+
+
+def test_shrink_stops_once_spawn_size_target_reached_without_further_deaths():
+    """Shrink should not overshoot the spawn-size target for the current player count
+    just because more time has passed at the same interval — only a new death (or the
+    stalemate timer) should push it further."""
+    state, space, bus, _died = _make_round(16)  # 29x29, plenty of rings available
+    state.players.pop(15)
+    update_shrink_target(state)
+    assert state.shrink_target_ring >= 1
+    target = state.shrink_target_ring
+    state.tick = 100
+
+    # Drive ticks forward until the target ring has closed.
+    for _ in range(SHRINK_WARN_TICKS + 1):
+        state.tick += 1
+        process_perimeter_shrink(state, space, bus)
+    assert state.shrink_ring == target
+
+    # Advance well past another interval with no new deaths and no stalemate timer:
+    # shrink must not progress beyond the target.
+    for _ in range(SHRINK_INTERVAL_TICKS * 2):
+        state.tick += 1
+        process_perimeter_shrink(state, space, bus)
+    assert state.shrink_ring == target
+    assert state.shrink_warn_ring == 0
 
 
 def test_tiles_stay_passable_during_the_warning_window():

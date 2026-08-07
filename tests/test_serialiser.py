@@ -9,7 +9,7 @@ def test_shrink_fields_round_trip_through_encode_decode():
     """Verify shrink-related GameState fields survive an encode/decode round trip."""
     state = GameState(
         tick=123, map_cols=15, map_rows=13, tiles=[], starting_player_count=4,
-        shrink_active=True, shrink_ring=2, shrink_warn_ring=3,
+        shrink_active=True, shrink_ring=2, shrink_target_ring=5, shrink_warn_ring=3,
         shrink_warn_ticks_remaining=42, shrink_next_warn_tick=999, shrink_stopped=False,
     )
     state.tiles = [[0] * state.map_cols for _ in range(state.map_rows)]
@@ -19,6 +19,7 @@ def test_shrink_fields_round_trip_through_encode_decode():
     assert decoded.starting_player_count == 4
     assert decoded.shrink_active is True
     assert decoded.shrink_ring == 2
+    assert decoded.shrink_target_ring == 5
     assert decoded.shrink_warn_ring == 3
     assert decoded.shrink_warn_ticks_remaining == 42
     assert decoded.shrink_next_warn_tick == 999
@@ -33,6 +34,7 @@ def test_shrink_fields_default_when_absent_from_older_payload():
     decoded = decode_state(encode_state(state))
     assert decoded.starting_player_count == 0
     assert decoded.shrink_active is False
+    assert decoded.shrink_target_ring == 0
     assert decoded.shrink_stopped is False
 
 
