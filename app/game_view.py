@@ -86,7 +86,25 @@ class GameView:
             )
             for kind, symbol in POWERUP_SYMBOLS.items()
         }
-        self._dizzy_texts: dict[int, arcade.Text] = {}
+        self._dizzy_text = arcade.Text(
+            '\U0001f635', 0, 0,
+            font_size=14,
+            anchor_x='center', anchor_y='bottom',
+        )
+        self._bomb_count_fill_text = arcade.Text(
+            '', 0, 0,
+            color=arcade.color.WHITE,
+            font_size=14,
+            bold=True,
+            anchor_x='center', anchor_y='bottom',
+        )
+        self._bomb_count_outline_text = arcade.Text(
+            '', 0, 0,
+            color=arcade.color.BLACK,
+            font_size=14,
+            bold=True,
+            anchor_x='center', anchor_y='bottom',
+        )
 
     def _make_camera(self, width: float, height: float) -> arcade.camera.Camera2D:
         play_w = width - HUD_WIDTH
@@ -327,9 +345,6 @@ class GameView:
         for pid in list(self._player_sprites):
             if pid not in current_pids:
                 del self._player_sprites[pid]
-        for pid in list(self._dizzy_texts):
-            if pid not in current_pids:
-                del self._dizzy_texts[pid]
 
         for pid, phys in state.player_physics.items():
             if pid not in self._player_sprites:
@@ -356,15 +371,43 @@ class GameView:
             arcade.draw_sprite(sprite)
 
             stats = state.players.get(pid)
-            if stats is not None and stats.reversed_controls_ticks > 0:
-                if pid not in self._dizzy_texts:
-                    self._dizzy_texts[pid] = arcade.Text(
-                        '\U0001f635', 0, 0,
-                        font_size=14,
-                        anchor_x='center', anchor_y='bottom',
-                    )
-                text_obj = self._dizzy_texts[pid]
-                text_obj.x = sprite.center_x
-                text_obj.y = sprite.center_y + _PLAYER_DRAW_SIZE * 0.55
-                text_obj.draw()
+            dizzy = stats is not None and stats.reversed_controls_ticks > 0
+
+            if pid == local_id and stats is not None:
+                if dizzy:
+                    self._draw_dizzy_icon(sprite, _PLAYER_DRAW_SIZE * 0.85)
+                else:
+                    self._draw_bomb_count(sprite, stats)
+            elif dizzy:
+                self._draw_dizzy_icon(sprite, _PLAYER_DRAW_SIZE * 0.55)
+
+    def _draw_dizzy_icon(self, sprite: arcade.Sprite, offset: float) -> None:
+        self._dizzy_text.x = sprite.center_x
+        self._dizzy_text.y = sprite.center_y + offset
+        self._dizzy_text.draw()
+
+    _BOMB_COUNT_OUTLINE_OFFSET = 1.5
+
+    def _draw_bomb_count(self, sprite: arcade.Sprite, stats) -> None:
+        """Draw the local player's remaining bomb count above their head,
+        as white text with a black outline (four offset black copies behind
+        a white copy, since arcade.Text has no native outline support)."""
+        remaining = max(0, stats.bomb_capacity - stats.bombs_in_use)
+        text = str(remaining)
+        x = sprite.center_x
+        y = sprite.center_y + _PLAYER_DRAW_SIZE * 0.85
+
+        outline = self._bomb_count_outline_text
+        outline.text = text
+        off = self._BOMB_COUNT_OUTLINE_OFFSET
+        for dx, dy in ((-off, -off), (-off, off), (off, -off), (off, off)):
+            outline.x = x + dx
+            outline.y = y + dy
+            outline.draw()
+
+        fill = self._bomb_count_fill_text
+        fill.text = text
+        fill.x = x
+        fill.y = y
+        fill.draw()
 
