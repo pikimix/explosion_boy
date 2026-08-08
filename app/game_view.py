@@ -17,6 +17,7 @@ from arcade.sprite.animated import TextureKeyframe
 
 from app.particle_system import ExplosionParticleSystem
 from app.shockwave_system import ShockwaveSystem
+from app.smoke_system import SmokeCloudSystem
 from app.ui import hud, speed_widget
 from app.ui.hud import HUD_WIDTH
 from core.components import PowerupKind, TileKind
@@ -62,6 +63,7 @@ class GameView:
         self._last_frame_time: float = 0.0
         self._particles = ExplosionParticleSystem()
         self._shockwaves = ShockwaveSystem()
+        self._smoke = SmokeCloudSystem()
         self._bomb_text = arcade.Text(
             self._BOMB_EMOJI, 0, 0,
             color=arcade.color.WHITE,
@@ -86,7 +88,8 @@ class GameView:
                 bold=True,
                 anchor_x='center', anchor_y='center',
             )
-            for kind in (PowerupKind.SUPER_BOMB, PowerupKind.CLUSTER_BOMB, PowerupKind.RUBBLE_BOMB)
+            for kind in (PowerupKind.SUPER_BOMB, PowerupKind.CLUSTER_BOMB, PowerupKind.RUBBLE_BOMB,
+                         PowerupKind.SMOKE_BOMB)
         }
         self._dizzy_text = arcade.Text(
             '\U0001f635', 0, 0,
@@ -199,10 +202,11 @@ class GameView:
         self._draw_shrink_warning(state)
         self._draw_powerups(state)
         self._draw_bombs(state)
+        self._draw_players(state, local_player_id, predicted_x, predicted_y, predicted_vx, predicted_vy)
+        self._draw_smoke(state, local_player_id, predicted_x, predicted_y)
         self._draw_explosions(state)
         self._particles.update(dt, state)
         self._particles.draw()
-        self._draw_players(state, local_player_id, predicted_x, predicted_y, predicted_vx, predicted_vy)
 
     # ── Tiles ─────────────────────────────────────────────────────────────────
 
@@ -287,6 +291,8 @@ class GameView:
             self._bomb_text.y = bomb.py
             self._bomb_text.draw()
             badge_kinds = []
+            if bomb.is_smoke:
+                badge_kinds.append(PowerupKind.SMOKE_BOMB)
             if bomb.is_super:
                 badge_kinds.append(PowerupKind.SUPER_BOMB)
             if bomb.is_cluster:
@@ -301,6 +307,20 @@ class GameView:
         for key in list(self._bomb_start_times):
             if key not in active_keys:
                 del self._bomb_start_times[key]
+
+    def _draw_smoke(
+        self,
+        state: GameState,
+        local_id: int | None,
+        pred_x: float | None,
+        pred_y: float | None,
+    ) -> None:
+        if local_id is not None and pred_x is not None and pred_y is not None:
+            px, py = pred_x, pred_y
+        else:
+            phys = state.player_physics.get(local_id) if local_id is not None else None
+            px, py = (phys.x, phys.y) if phys is not None else (-1.0e6, -1.0e6)
+        self._smoke.draw(state, px, py)
 
     def _draw_explosions(self, state: GameState) -> None:
         for exp in state.explosions:

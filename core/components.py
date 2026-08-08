@@ -32,6 +32,7 @@ class PowerupKind(IntEnum):
     RUBBLE_BOMB           = 9
     REVERSE_CONTROLS_SELF = 10  # affects only the collector
     BLAST_PENETRATION     = 11  # how many soft blocks one arm can punch through
+    SMOKE_BOMB            = 12
 
 
 @dataclass(frozen=True)
@@ -98,6 +99,7 @@ class PlayerStats:
     has_rubble_bomb:    bool = False
     shield_invincibility_ticks: int = 0
     blast_penetration:  int  = 2  # starts matching blast_radius default
+    has_smoke_bomb:     bool = False
 
 
 @dataclass
@@ -116,6 +118,7 @@ class BombComponent:
     is_cluster:        bool = False
     is_rubble:         bool = False
     blast_penetration: int  = 1
+    is_smoke:          bool = False
 
 
 @dataclass
@@ -134,6 +137,20 @@ class ExplosionRay:
     direction: tuple[int, int]
     length: int
     ticks_remaining: int
+
+
+@dataclass
+class SmokeCloud:
+    """A smoke bomb's opaque-to-transparent AOE, ticked independently of
+    explosions. No damage or kill logic ever reads this — it is a pure
+    client-rendering hint. col/row/radius/duration are captured from the
+    placing player's stats at placement time, same convention as
+    BombComponent.blast_radius/blast_penetration."""
+    col: int
+    row: int
+    radius: int          # grid cells; filled Chebyshev box [-radius, +radius]
+    ticks_remaining: int
+    ticks_total: int     # captured fade duration (varies per cloud), for life-ratio calc
 
 
 @dataclass

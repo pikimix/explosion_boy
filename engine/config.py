@@ -85,6 +85,7 @@ POWERUP_COLOURS: dict[int, tuple[int, int, int, int]] = {
     9:  (139, 90,  43,  255),   # earthy brown (RUBBLE_BOMB)
     10: (150, 30,  160, 255),   # dark purple (REVERSE_CONTROLS_SELF)
     11: (255, 120, 20,  255),   # amber       (BLAST_PENETRATION)
+    12: (90,  90,  90,  200),   # smoky grey, semi-transparent (SMOKE_BOMB)
 }
 
 POWERUP_SYMBOLS: dict[int, str] = {
@@ -99,6 +100,7 @@ POWERUP_SYMBOLS: dict[int, str] = {
     9:  '\U0001faa8',  # RUBBLE_BOMB   (🪨)
     10: '¿',   # REVERSE_CONTROLS_SELF (affects collector)
     11: '⇑',  # BLAST_PENETRATION
+    12: '\U0001f4a8',  # SMOKE_BOMB (💨)
 }
 
 PLAYER_COLOURS = [

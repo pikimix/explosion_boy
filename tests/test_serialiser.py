@@ -1,6 +1,6 @@
 """Tests for GameState encode/decode round-tripping in core/serialiser.py."""
 
-from core.components import Colour
+from core.components import Colour, SmokeCloud
 from core.serialiser import decode_state, encode_state
 from core.state import GameState
 
@@ -46,3 +46,15 @@ def test_player_colours_round_trip_as_colour_instances():
     decoded = decode_state(encode_state(state))
 
     assert decoded.player_colours[0] == Colour(220, 50, 10)
+
+
+def test_smoke_clouds_round_trip_through_encode_decode():
+    """Verify SmokeCloud entries survive an encode/decode round trip."""
+    state = GameState(tick=1, map_cols=3, map_rows=3, tiles=[[0, 0, 0]] * 3)
+    state.smoke_clouds.append(SmokeCloud(col=3, row=4, radius=2, ticks_remaining=100, ticks_total=240))
+
+    decoded = decode_state(encode_state(state))
+
+    assert len(decoded.smoke_clouds) == 1
+    cloud = decoded.smoke_clouds[0]
+    assert (cloud.col, cloud.row, cloud.radius, cloud.ticks_remaining, cloud.ticks_total) == (3, 4, 2, 100, 240)

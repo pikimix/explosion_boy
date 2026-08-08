@@ -21,6 +21,7 @@ _POWERUP_WEIGHTS: dict[PowerupKind, int] = {
     PowerupKind.SUPER_BOMB:             9,
     PowerupKind.CLUSTER_BOMB:           9,
     PowerupKind.RUBBLE_BOMB:            9,
+    PowerupKind.SMOKE_BOMB:              9,
 }
 
 _POWERUP_POPULATION = list(_POWERUP_WEIGHTS.keys())
@@ -139,5 +140,7 @@ def _apply(state: GameState, player_id: int, kind: PowerupKind) -> None:
         stats.has_cluster_bomb = True
     elif kind == PowerupKind.RUBBLE_BOMB:
         stats.has_rubble_bomb = True
+    elif kind == PowerupKind.SMOKE_BOMB:
+        stats.has_smoke_bomb = True
     elif kind == PowerupKind.BLAST_PENETRATION:
         stats.blast_penetration += 1

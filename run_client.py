@@ -33,7 +33,9 @@ def main() -> None:
 
     if args.no_shader:
         from app.particle_system import disable as _disable_particles
+        from app.smoke_system import disable as _disable_smoke
         _disable_particles()
+        _disable_smoke()
 
     transport = make_client_transport(
         args.backend, host=args.host, port=args.port

@@ -22,6 +22,7 @@ class DetonationEvent:
     is_cluster:        bool = False
     is_rubble:         bool = False
     blast_penetration: int  = 1
+    is_smoke:          bool = False
 
 
 def apply_new_bombs(
@@ -71,20 +72,38 @@ def apply_new_bombs(
         px = col * TILE_SIZE + TILE_SIZE / 2
         py = row * TILE_SIZE + TILE_SIZE / 2
 
-        bomb = BombComponent(
-            owner_id=pid,
-            fuse_ticks_remaining=BOMB_FUSE_TICKS,
-            blast_radius=stats.blast_radius,
-            col=col, row=row,
-            px=px, py=py,
-            is_super=stats.has_super_bomb,
-            is_cluster=stats.has_cluster_bomb,
-            is_rubble=stats.has_rubble_bomb,
-            blast_penetration=stats.blast_penetration,
-        )
-        stats.has_super_bomb = False
-        stats.has_cluster_bomb = False
-        stats.has_rubble_bomb = False
+        if stats.has_smoke_bomb:
+            # Exclusive: never combines with super/cluster/rubble on this
+            # bomb. Jumps the queue but does NOT discard the other pending
+            # flags — they remain queued for this player's next placement.
+            # Smoke has no real blast, so blast_radius here is repurposed
+            # as the cloud's radius: blast power + bomb capacity combined,
+            # so both stats grow the smoke coverage.
+            bomb = BombComponent(
+                owner_id=pid,
+                fuse_ticks_remaining=BOMB_FUSE_TICKS,
+                blast_radius=stats.blast_radius + stats.bomb_capacity,
+                col=col, row=row,
+                px=px, py=py,
+                is_smoke=True,
+                blast_penetration=stats.blast_penetration,
+            )
+            stats.has_smoke_bomb = False
+        else:
+            bomb = BombComponent(
+                owner_id=pid,
+                fuse_ticks_remaining=BOMB_FUSE_TICKS,
+                blast_radius=stats.blast_radius,
+                col=col, row=row,
+                px=px, py=py,
+                is_super=stats.has_super_bomb,
+                is_cluster=stats.has_cluster_bomb,
+                is_rubble=stats.has_rubble_bomb,
+                blast_penetration=stats.blast_penetration,
+            )
+            stats.has_super_bomb = False
+            stats.has_cluster_bomb = False
+            stats.has_rubble_bomb = False
         state.bombs.append(bomb)
         space.add_bomb(len(state.bombs) - 1, px, py)
         stats.bombs_in_use += 1
@@ -140,6 +159,7 @@ def process_fuses(state: GameState) -> list[DetonationEvent]:
                 is_cluster=bomb.is_cluster,
                 is_rubble=bomb.is_rubble,
                 blast_penetration=bomb.blast_penetration,
+                is_smoke=bomb.is_smoke,
             ))
     return detonations
 

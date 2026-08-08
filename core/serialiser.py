@@ -19,6 +19,7 @@ from core.components import (
     PlayerStats,
     PowerupComponent,
     PowerupKind,
+    SmokeCloud,
     TileKind,
 )
 from core.state import GameState
@@ -32,12 +33,13 @@ def _enc_physics(p: PhysicsState) -> list:
 def _enc_stats(s: PlayerStats) -> list:
     return [s.player_id, s.lives, s.bomb_capacity, s.bombs_in_use, s.blast_radius, s.shield,
             s.reversed_controls_ticks, s.speed_level, s.has_super_bomb, s.has_cluster_bomb,
-            s.has_rubble_bomb, s.shield_invincibility_ticks, s.blast_penetration]
+            s.has_rubble_bomb, s.shield_invincibility_ticks, s.blast_penetration,
+            s.has_smoke_bomb]
 
 def _enc_bomb(b: BombComponent) -> list:
     return [b.owner_id, b.fuse_ticks_remaining, b.blast_radius,
             b.col, b.row, b.px, b.py, b.vx, b.vy, b.is_super, b.is_cluster, b.is_rubble,
-            b.blast_penetration]
+            b.blast_penetration, b.is_smoke]
 
 def _enc_exp_center(e: ExplosionCenter) -> list:
     return [e.col, e.row, e.ticks_remaining]
@@ -45,6 +47,9 @@ def _enc_exp_center(e: ExplosionCenter) -> list:
 def _enc_exp_ray(r: ExplosionRay) -> list:
     return [r.origin_col, r.origin_row, r.direction[0], r.direction[1],
             r.length, r.ticks_remaining]
+
+def _enc_smoke(sc: SmokeCloud) -> list:
+    return [sc.col, sc.row, sc.radius, sc.ticks_remaining, sc.ticks_total]
 
 def _enc_powerup(p: PowerupComponent) -> list:
     return [int(p.kind), p.col, p.row]
@@ -79,6 +84,7 @@ def encode_state(gs: GameState) -> bytes:
         "bm": [_enc_bomb(b) for b in gs.bombs],
         "ex": [_enc_exp_center(e) for e in gs.explosions],
         "er": [_enc_exp_ray(r) for r in gs.explosion_rays],
+        "sm": [_enc_smoke(sc) for sc in gs.smoke_clouds],
         "pw": [_enc_powerup(p) for p in gs.powerups],
         "ph": int(gs.phase),
         "wi": gs.winner_id,
@@ -126,6 +132,7 @@ def decode_state(data: bytes) -> GameState:
             ExplosionRay(r[0], r[1], (r[2], r[3]), r[4], r[5])
             for r in d["er"]
         ],
+        smoke_clouds=[SmokeCloud(*s) for s in d["sm"]],
         powerups=[PowerupComponent(PowerupKind(p[0]), p[1], p[2]) for p in d["pw"]],
         player_names={int(k): v for k, v in d.get("pn", {}).items()},
         player_colours={int(k): Colour(*v) for k, v in d.get("pc", {}).items()},

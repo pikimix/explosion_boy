@@ -9,10 +9,11 @@ from core.components import (
     Cell,
     ExplosionCenter,
     ExplosionRay,
+    SmokeCloud,
     TileKind,
 )
 from core.state import GameState
-from engine.config import EXPLOSION_DURATION_TICKS, TILE_SIZE
+from engine.config import EXPLOSION_DURATION_TICKS, TICK_RATE, TILE_SIZE
 from engine.physics import PhysicsSpace
 from systems.bomb_system import DetonationEvent, remove_bombs
 from systems.collision import px_to_grid
@@ -89,7 +90,9 @@ def process_detonations(
 
         bus.emit(BombDetonatedEvent(det.col, det.row))
 
-        if det.is_rubble:
+        if det.is_smoke:
+            _spawn_smoke_cloud(state, det)
+        elif det.is_rubble:
             _rubble_bomb_explosion(state, space, det, bus, bomb_by_cell, queue, processed_indices, lit_cells)
         elif det.is_super:
             _super_bomb_explosion(state, space, det, bus, bomb_by_cell, queue, processed_indices, lit_cells)
@@ -139,6 +142,7 @@ def process_detonations(
                             is_cluster=bomb.is_cluster,
                             is_rubble=bomb.is_rubble,
                             blast_penetration=bomb.blast_penetration,
+                            is_smoke=bomb.is_smoke,
                         ))
 
                     ray_len = dist
@@ -197,6 +201,7 @@ def _super_bomb_explosion(
                     bomb_idx=bi, col=b.col, row=b.row,
                     blast_radius=b.blast_radius, owner_id=b.owner_id,
                     is_super=b.is_super, is_cluster=b.is_cluster, is_rubble=b.is_rubble,
+                    blast_penetration=b.blast_penetration, is_smoke=b.is_smoke,
                 ))
 
 
@@ -241,6 +246,7 @@ def _rubble_bomb_explosion(
                     bomb_idx=bi, col=b.col, row=b.row,
                     blast_radius=b.blast_radius, owner_id=b.owner_id,
                     is_super=b.is_super, is_cluster=b.is_cluster, is_rubble=b.is_rubble,
+                    blast_penetration=b.blast_penetration, is_smoke=b.is_smoke,
                 ))
 
     # Scatter new soft blocks on empty cells within the AOE (1-in-5 chance each)
@@ -256,6 +262,26 @@ def _rubble_bomb_explosion(
                 state.tiles[r][c] = TileKind.SOFT_BLOCK
                 state.tiles_dirty = True
                 space.add_wall(c, r)
+
+
+def _spawn_smoke_cloud(state: GameState, det: DetonationEvent) -> None:
+    """Spawn a smoke cloud — a pure visual utility effect, no damage or kill logic.
+
+    Radius and fade duration are captured from the bomb's stats at
+    placement time (det.blast_radius / det.blast_penetration), the same
+    convention every other bomb type already uses. Smoke bombs never
+    scatter soft blocks, damage players, or chain-react other bombs.
+
+    The cloud holds at near-full opacity for blast_penetration*2 seconds,
+    then fades out over an equal-length second phase — the client (see
+    smoke.frag) splits ticks_total exactly in half to render this.
+    """
+    hold_seconds = det.blast_penetration * 2
+    ticks_total = round(hold_seconds * 2 * TICK_RATE)
+    state.smoke_clouds.append(SmokeCloud(
+        col=det.col, row=det.row, radius=det.blast_radius,
+        ticks_remaining=ticks_total, ticks_total=ticks_total,
+    ))
 
 
 def _spawn_cluster_sub_bombs(
@@ -316,6 +342,17 @@ def tick_explosions(state: GameState) -> None:
     if len(state.explosions) + len(state.explosion_rays) != prev_count:
         # Something aged out — the cached lit-cell set no longer matches.
         state.lit_cells_dirty = True
+
+
+def tick_smoke_clouds(state: GameState) -> None:
+    """Age all active smoke clouds.
+
+    Deliberately separate from tick_explosions: a smoke cloud's remaining
+    life must never be shortened, cleared, or otherwise touched by nearby
+    or overlapping bomb detonations — process_detonations never writes to
+    state.smoke_clouds except to append new ones via _spawn_smoke_cloud.
+    """
+    state.smoke_clouds = [sc for sc in state.smoke_clouds if _tick_and_keep(sc)]
 
 
 def _tick_and_keep(obj) -> bool:

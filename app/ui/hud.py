@@ -64,10 +64,11 @@ _LEGEND_ENTRIES: list[tuple[str, str, tuple[int, int, int, int]]] = [
     (POWERUP_SYMBOLS[9], 'Rubble bomb',   POWERUP_COLOURS[9]),
     (POWERUP_SYMBOLS[10], 'Dizzy (self)',    POWERUP_COLOURS[10]),
     (POWERUP_SYMBOLS[11], 'Blast pierce',    POWERUP_COLOURS[11]),
+    (POWERUP_SYMBOLS[12], 'Smoke bomb',      POWERUP_COLOURS[12]),
 ]
 
 # Boolean powerup slots shown per player in a fixed row, left-to-right
-_BOOL_SLOT_IDS = [3, 7, 8, 9, 10]
+_BOOL_SLOT_IDS = [3, 7, 8, 9, 10, 12]
 
 _legend_header: arcade.Text | None = None
 _legend_symbol_texts: list[arcade.Text] = []
@@ -88,6 +89,7 @@ def _slot_active(kind_id: int, stats) -> bool:
         8:  lambda s: s.has_cluster_bomb,
         9:  lambda s: s.has_rubble_bomb,
         10: lambda s: s.reversed_controls_ticks > 0,
+        12: lambda s: s.has_smoke_bomb,
     }[kind_id](stats)
 
 

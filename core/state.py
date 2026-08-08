@@ -12,6 +12,7 @@ from core.components import (
     PlayerStats,
     PhysicsState,
     PowerupComponent,
+    SmokeCloud,
     TileKind,
 )
 
@@ -34,6 +35,7 @@ class GameState:
     bombs: list[BombComponent] = field(default_factory=list)
     explosions: list[ExplosionCenter] = field(default_factory=list)
     explosion_rays: list[ExplosionRay] = field(default_factory=list)
+    smoke_clouds: list[SmokeCloud] = field(default_factory=list)
     powerups: list[PowerupComponent] = field(default_factory=list)
 
     player_names: dict[int, str] = field(default_factory=dict)

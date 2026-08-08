@@ -1,12 +1,12 @@
 """Tests for detonation dispatch and cluster/super/rubble powerup combinations."""
 
-from core.components import BombComponent, Cell, PhysicsState, PlayerStats, TileKind
+from core.components import BombComponent, Cell, PhysicsState, PlayerStats, SmokeCloud, TileKind
 from core.state import GameState
-from engine.config import TILE_SIZE
+from engine.config import TICK_RATE, TILE_SIZE
 from engine.physics import PhysicsSpace
 from systems.bomb_system import DetonationEvent
 from systems.event_bus import EventBus
-from systems.explosion_system import process_detonations, tick_explosions
+from systems.explosion_system import process_detonations, tick_explosions, tick_smoke_clouds
 
 
 def _make_empty_state(cols: int = 15, rows: int = 15) -> GameState:
@@ -386,3 +386,124 @@ def test_rubble_combined_with_super_uses_full_radius() -> None:
     # full radius of 4 -> now reaches col 3, which the un-combined rubble bomb didn't
     lit = {(e.col, e.row) for e in state.explosions}
     assert (3, 7) in lit
+
+
+def test_smoke_bomb_detonation_spawns_cloud_and_deals_no_damage() -> None:
+    state = _make_empty_state()
+    space = _make_space(state)
+    state.tiles[7][6] = TileKind.SOFT_BLOCK
+    space.rebuild_static_walls(state.tiles)
+    _add_player(state, pid=1, col=7, row=7)
+
+    bomb = BombComponent(
+        owner_id=0, fuse_ticks_remaining=1, blast_radius=3,
+        col=7, row=7, px=0, py=0, is_smoke=True, blast_penetration=2,
+    )
+    state.bombs.append(bomb)
+    space.add_bomb(0, bomb.px, bomb.py)
+
+    det = DetonationEvent(
+        bomb_idx=0, col=7, row=7, blast_radius=3, owner_id=0,
+        is_smoke=True, blast_penetration=2,
+    )
+    process_detonations(state, space, [det], EventBus())
+
+    assert len(state.smoke_clouds) == 1
+    cloud = state.smoke_clouds[0]
+    assert (cloud.col, cloud.row) == (7, 7)
+    assert cloud.radius == 3
+    assert cloud.ticks_total == round(2 * 2 * 2 * TICK_RATE)
+    assert cloud.ticks_remaining == cloud.ticks_total
+
+    # No damage: soft block survives, no explosions/rays recorded.
+    assert state.tiles[7][6] == TileKind.SOFT_BLOCK
+    assert state.explosions == []
+    assert state.explosion_rays == []
+    # No kill: player standing on the smoke bomb's own cell survives.
+    assert 1 in state.players
+    assert 1 in state.player_physics
+
+
+def test_tick_explosions_does_not_affect_smoke_clouds() -> None:
+    state = _make_empty_state()
+    space = _make_space(state)
+    state.smoke_clouds.append(SmokeCloud(col=3, row=3, radius=2, ticks_remaining=5, ticks_total=5))
+    bomb = BombComponent(owner_id=0, fuse_ticks_remaining=1, blast_radius=2,
+                         col=10, row=10, px=0, py=0)
+    state.bombs.append(bomb)
+    space.add_bomb(0, bomb.px, bomb.py)
+    process_detonations(
+        state, space,
+        [DetonationEvent(bomb_idx=0, col=10, row=10, blast_radius=2, owner_id=0)],
+        EventBus(),
+    )
+    assert state.explosions  # sanity: the unrelated explosion did age-able state
+
+    for _ in range(3):
+        tick_explosions(state)
+
+    assert state.smoke_clouds[0].ticks_remaining == 5
+
+
+def test_tick_smoke_clouds_ages_and_removes_independently() -> None:
+    state = _make_empty_state()
+    state.smoke_clouds.append(SmokeCloud(col=3, row=3, radius=2, ticks_remaining=3, ticks_total=3))
+
+    tick_smoke_clouds(state)
+    assert len(state.smoke_clouds) == 1
+    assert state.smoke_clouds[0].ticks_remaining == 2
+
+    tick_smoke_clouds(state)
+    assert len(state.smoke_clouds) == 1
+    assert state.smoke_clouds[0].ticks_remaining == 1
+
+    tick_smoke_clouds(state)
+    assert state.smoke_clouds == []
+
+
+def test_nearby_explosion_does_not_shorten_smoke_cloud() -> None:
+    state = _make_empty_state()
+    space = _make_space(state)
+    state.smoke_clouds.append(SmokeCloud(col=5, row=5, radius=2, ticks_remaining=100, ticks_total=100))
+
+    bomb = BombComponent(owner_id=0, fuse_ticks_remaining=1, blast_radius=3,
+                         col=5, row=5, px=0, py=0)
+    state.bombs.append(bomb)
+    space.add_bomb(0, bomb.px, bomb.py)
+    process_detonations(
+        state, space,
+        [DetonationEvent(bomb_idx=0, col=5, row=5, blast_radius=3, owner_id=0)],
+        EventBus(),
+    )
+
+    assert len(state.smoke_clouds) == 1
+    assert state.smoke_clouds[0].ticks_remaining == 100
+    assert state.smoke_clouds[0].ticks_total == 100
+
+
+def test_chain_reacted_smoke_bomb_keeps_its_captured_blast_penetration() -> None:
+    state = _make_empty_state()
+    space = _make_space(state)
+    # Rubble bomb at (5,5), blast_radius=4 -> half=2, covers cols 3..7, rows 3..7.
+    rubble_bomb = BombComponent(
+        owner_id=0, fuse_ticks_remaining=1, blast_radius=4,
+        col=5, row=5, px=0, py=0, is_rubble=True,
+    )
+    # Smoke bomb parked inside that AOE, with a non-default blast_penetration.
+    smoke_bomb = BombComponent(
+        owner_id=1, fuse_ticks_remaining=1, blast_radius=2,
+        col=6, row=5, px=0, py=0, is_smoke=True, blast_penetration=5,
+    )
+    state.bombs.extend([rubble_bomb, smoke_bomb])
+    space.add_bomb(0, rubble_bomb.px, rubble_bomb.py)
+    space.add_bomb(1, smoke_bomb.px, smoke_bomb.py)
+
+    dets = [
+        DetonationEvent(bomb_idx=0, col=5, row=5, blast_radius=4, owner_id=0, is_rubble=True),
+    ]
+    process_detonations(state, space, dets, EventBus())
+
+    assert len(state.smoke_clouds) == 1
+    cloud = state.smoke_clouds[0]
+    assert (cloud.col, cloud.row) == (6, 5)
+    assert cloud.ticks_total == round(5 * 2 * 2 * TICK_RATE)

@@ -44,7 +44,11 @@ from systems.bomb_system import (
 )
 from systems.collision import sync_grid_positions
 from systems.event_bus import EventBus, PlayerDiedEvent
-from systems.explosion_system import process_detonations, tick_explosions
+from systems.explosion_system import (
+    process_detonations,
+    tick_explosions,
+    tick_smoke_clouds,
+)
 from systems.input_buffer import InputBuffer
 from systems.movement import process_movement
 from systems.powerup_system import (
@@ -322,6 +326,7 @@ class GameServer:
         process_movement(self._state, self._space, inputs, self._tick_dt)
         sync_grid_positions(self._state)
         tick_explosions(self._state)
+        tick_smoke_clouds(self._state)  # independent of tick_explosions
         apply_new_bombs(self._state, self._space, inputs)
         sync_pushed_bombs(self._state, self._space)
         detonations = process_fuses(self._state)
