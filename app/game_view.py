@@ -62,20 +62,12 @@ class GameView:
         self._last_frame_time: float = 0.0
         self._particles = ExplosionParticleSystem()
         self._shockwaves = ShockwaveSystem()
-        self._bomb_texts: dict[str, arcade.Text] = {
-            emoji: arcade.Text(
-                emoji, 0, 0,
-                color=arcade.color.WHITE,
-                font_size=self._BOMB_FONT_SIZE,
-                anchor_x='center', anchor_y='center',
-            )
-            for emoji in (
-                self._BOMB_EMOJI,
-                POWERUP_SYMBOLS[PowerupKind.SUPER_BOMB],
-                POWERUP_SYMBOLS[PowerupKind.CLUSTER_BOMB],
-                POWERUP_SYMBOLS[PowerupKind.RUBBLE_BOMB],
-            )
-        }
+        self._bomb_text = arcade.Text(
+            self._BOMB_EMOJI, 0, 0,
+            color=arcade.color.WHITE,
+            font_size=self._BOMB_FONT_SIZE,
+            anchor_x='center', anchor_y='center',
+        )
         self._powerup_texts: dict[int, arcade.Text] = {
             kind: arcade.Text(
                 symbol, 0, 0,
@@ -85,6 +77,16 @@ class GameView:
                 anchor_x='center', anchor_y='center',
             )
             for kind, symbol in POWERUP_SYMBOLS.items()
+        }
+        self._bomb_badge_texts: dict[int, arcade.Text] = {
+            kind: arcade.Text(
+                POWERUP_SYMBOLS[kind], 0, 0,
+                color=POWERUP_COLOURS.get(kind, (255, 255, 255, 255)),
+                font_size=self._BOMB_BADGE_FONT_SIZE,
+                bold=True,
+                anchor_x='center', anchor_y='center',
+            )
+            for kind in (PowerupKind.SUPER_BOMB, PowerupKind.CLUSTER_BOMB, PowerupKind.RUBBLE_BOMB)
         }
         self._dizzy_text = arcade.Text(
             '\U0001f635', 0, 0,
@@ -252,6 +254,15 @@ class GameView:
 
     _BOMB_EMOJI = '\U0001f4a3'         # 💣  normal (not a powerup, no POWERUP_SYMBOLS entry)
     _BOMB_FONT_SIZE = int(TILE_SIZE * 0.55)
+    _BOMB_BADGE_FONT_SIZE = int(TILE_SIZE * 0.32)
+    _BOMB_BADGE_OFFSET = TILE_SIZE * 0.3
+    # one corner per badge kind, in a fixed order: top-right, top-left, bottom-right, bottom-left
+    _BOMB_BADGE_CORNERS = (
+        (_BOMB_BADGE_OFFSET, _BOMB_BADGE_OFFSET),
+        (-_BOMB_BADGE_OFFSET, _BOMB_BADGE_OFFSET),
+        (_BOMB_BADGE_OFFSET, -_BOMB_BADGE_OFFSET),
+        (-_BOMB_BADGE_OFFSET, -_BOMB_BADGE_OFFSET),
+    )
 
     def _draw_bombs(self, state: GameState) -> None:
         now = time.monotonic()
@@ -272,18 +283,21 @@ class GameView:
                 bomb.px, bomb.py, TILE_SIZE * 0.42,
                 (BOMB_PULSE_COLOUR[0], BOMB_PULSE_COLOUR[1], BOMB_PULSE_COLOUR[2], glow_alpha),
             )
+            self._bomb_text.x = bomb.px
+            self._bomb_text.y = bomb.py
+            self._bomb_text.draw()
+            badge_kinds = []
             if bomb.is_super:
-                emoji = POWERUP_SYMBOLS[PowerupKind.SUPER_BOMB]
-            elif bomb.is_cluster:
-                emoji = POWERUP_SYMBOLS[PowerupKind.CLUSTER_BOMB]
-            elif bomb.is_rubble:
-                emoji = POWERUP_SYMBOLS[PowerupKind.RUBBLE_BOMB]
-            else:
-                emoji = self._BOMB_EMOJI
-            text_obj = self._bomb_texts[emoji]
-            text_obj.x = bomb.px
-            text_obj.y = bomb.py
-            text_obj.draw()
+                badge_kinds.append(PowerupKind.SUPER_BOMB)
+            if bomb.is_cluster:
+                badge_kinds.append(PowerupKind.CLUSTER_BOMB)
+            if bomb.is_rubble:
+                badge_kinds.append(PowerupKind.RUBBLE_BOMB)
+            for badge_kind, (dx, dy) in zip(badge_kinds, self._BOMB_BADGE_CORNERS):
+                badge = self._bomb_badge_texts[badge_kind]
+                badge.x = bomb.px + dx
+                badge.y = bomb.py + dy
+                badge.draw()
         for key in list(self._bomb_start_times):
             if key not in active_keys:
                 del self._bomb_start_times[key]
