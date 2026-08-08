@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from core.components import TileKind
 from engine.config import MAX_GRID_SIZE, MIN_GRID_SIZE, TILE_SIZE
-from net.lobby import LobbyManager
+from net.lobby import LobbyManager, READY_COUNTDOWN_SECONDS
 from systems.world import map_size_for_player_count, spawn_points_for_grid
 
 
@@ -74,3 +74,39 @@ def test_build_initial_state_protects_spawns_with_non_contiguous_player_ids():
                 if not (0 <= r < state.map_rows and 0 <= c < state.map_cols):
                     continue
                 assert state.tiles[r][c] != TileKind.SOFT_BLOCK
+
+
+def test_countdown_starts_once_everyone_ready_and_cancels_on_unready():
+    """The 5s ready countdown only starts once every player is ready, and
+    cancels immediately if anyone un-readies."""
+    lobby = LobbyManager(_FakeTransport())
+    p1, p2 = uuid4(), uuid4()
+    lobby.on_join(p1, "a")
+    lobby.on_join(p2, "b")
+
+    lobby.on_ready(p1, True)
+    assert lobby.countdown_seconds() is None
+
+    lobby.on_ready(p2, True)
+    assert lobby.countdown_seconds() == READY_COUNTDOWN_SECONDS
+
+    lobby.on_ready(p2, False)
+    assert lobby.countdown_seconds() is None
+
+
+def test_countdown_tick_signals_game_start_after_delay():
+    """Ticking the countdown for its full duration reports the game should start."""
+    lobby = LobbyManager(_FakeTransport())
+    p1, p2 = uuid4(), uuid4()
+    lobby.on_join(p1, "a")
+    lobby.on_join(p2, "b")
+    lobby.on_ready(p1, True)
+    lobby.on_ready(p2, True)
+
+    started = False
+    for _ in range(1000):
+        if lobby.tick(0.1):
+            started = True
+            break
+    assert started
+    assert lobby.countdown_seconds() is None

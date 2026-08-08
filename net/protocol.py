@@ -13,7 +13,7 @@ from core.components import Colour
 from core.serialiser import decode_msg, encode_msg, decode_state
 from core.state import GameState
 
-PROTOCOL_VERSION: int = 2
+PROTOCOL_VERSION: int = 3
 
 # ── Client → Server ────────────────────────────────────────────────────────────
 
@@ -265,6 +265,7 @@ class LobbyUpdateMsg:
     """Server broadcast of the current lobby roster and ready states."""
 
     players: list[dict]   # [{"id": int, "name": str, "ready": bool}]
+    countdown: int | None = None  # whole seconds left before game start, or None
     TYPE: str = "lobby_update"
 
     def encode(self) -> bytes:
@@ -275,7 +276,8 @@ class LobbyUpdateMsg:
         bytes
             The encoded message ready to be sent over the network.
         """
-        return encode_msg({"type": self.TYPE, "players": self.players})
+        return encode_msg({"type": self.TYPE, "players": self.players,
+                           "countdown": self.countdown})
 
     @staticmethod
     def decode(d: dict) -> "LobbyUpdateMsg":
@@ -291,7 +293,7 @@ class LobbyUpdateMsg:
         LobbyUpdateMsg
             The reconstructed message.
         """
-        return LobbyUpdateMsg(players=d["players"])
+        return LobbyUpdateMsg(players=d["players"], countdown=d.get("countdown"))
 
 
 @dataclass

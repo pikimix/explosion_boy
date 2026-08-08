@@ -107,13 +107,23 @@ class GameServer:
         """Run the main server loop, polling the transport and ticking the game forever."""
         print(f"[{_ts()}] Server running at {self._tick_rate} tps "
               f"(rollback window: {self._rollback_buffer_size} ticks). Waiting for players…")
+        last_time = time.perf_counter()
         while True:
             if self._state is not None and self._state.phase == GamePhase.PLAYING:
                 timeout = self._clock.seconds_until_next_tick()
             else:
                 timeout = 0.005
             self._poll(timeout)
-            if self._state is None or self._state.phase != GamePhase.PLAYING:
+
+            now = time.perf_counter()
+            dt = now - last_time
+            last_time = now
+
+            if self._state is None:
+                if self._lobby.tick(dt):
+                    self._start_game()
+                continue
+            if self._state.phase != GamePhase.PLAYING:
                 continue
             if self._clock.should_tick():
                 self._tick()
@@ -160,12 +170,9 @@ class GameServer:
                     CHANNEL_RELIABLE,
                 )
                 print(f"[{_ts()}] {msg.player_name!r} joined as spectator (game in progress).")
-            else:
-                self._maybe_start_game()
 
         elif isinstance(msg, ReadyMsg):
             self._lobby.on_ready(peer_id, msg.ready)
-            self._maybe_start_game()
 
         elif isinstance(msg, ColourMsg):
             self._lobby.on_colour(peer_id, msg.colour)
@@ -212,12 +219,8 @@ class GameServer:
 
     # ── Game start ────────────────────────────────────────────────────────────
 
-    def _maybe_start_game(self) -> None:
-        if self._state is not None:
-            return
-        if not self._lobby.should_start():
-            return
-
+    def _start_game(self) -> None:
+        """Build and broadcast the initial game state once the ready countdown elapses."""
         state = self._lobby.build_initial_state()
         self._state = state
         self._initial_soft_blocks = sum(

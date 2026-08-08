@@ -60,6 +60,7 @@ class LobbyScene:
         self._player_name = player_name
         self._players: list[dict] = []
         self._ready = False
+        self._countdown: int | None = None
         self._debug = debug
         self._spawn_shapes: arcade.shape_list.ShapeElementList = (
             arcade.shape_list.ShapeElementList()
@@ -96,6 +97,18 @@ class LobbyScene:
             play_cx, WINDOW_H / 2,
             arcade.color.WHITE, font_size=16,
             anchor_x='center',
+        )
+        self._countdown_label_text = arcade.Text(
+            'Starting in',
+            play_cx, WINDOW_H / 2 + 60,
+            arcade.color.WHITE, font_size=18,
+            anchor_x='center', anchor_y='center',
+        )
+        self._countdown_text = arcade.Text(
+            '',
+            play_cx, WINDOW_H / 2,
+            arcade.color.WHITE, font_size=72, bold=True,
+            anchor_x='center', anchor_y='center',
         )
 
         swatch_w = HUD_WIDTH - _HUD_X * 2
@@ -357,6 +370,7 @@ class LobbyScene:
         for msg in self._client.poll_messages():
             if isinstance(msg, LobbyUpdateMsg):
                 self._players = msg.players
+                self._countdown = msg.countdown
                 self._rebuild_preview(len(self._players))
                 if self._client.player_id is not None and not self._colour_initialised:
                     pid = self._client.player_id
@@ -396,6 +410,10 @@ class LobbyScene:
         self._title_text.draw()
         if not self._players:
             self._waiting_text.draw()
+        if self._countdown is not None:
+            self._countdown_text.text = str(self._countdown)
+            self._countdown_label_text.draw()
+            self._countdown_text.draw()
         self._draw_hud()
         if self._picker_open:
             self._draw_picker_popup()
@@ -568,6 +586,10 @@ class LobbyScene:
         self._title_text.y = height - 40
         self._waiting_text.x = play_cx
         self._waiting_text.y = height / 2
+        self._countdown_label_text.x = play_cx
+        self._countdown_label_text.y = height / 2 + 60
+        self._countdown_text.x = play_cx
+        self._countdown_text.y = height / 2
 
     def on_text(self, text: str) -> None:
         """Append printable characters typed by the player to the in-progress name draft.

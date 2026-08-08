@@ -1,6 +1,7 @@
 """Server-side lobby: join/ready handshake and game-start trigger."""
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -20,6 +21,8 @@ from systems.world import (
     spawn_points_for_grid,
     spawn_position_px,
 )
+
+READY_COUNTDOWN_SECONDS = 5.0
 
 
 @dataclass
@@ -44,6 +47,8 @@ class LobbyManager:
         self._transport = transport
         self._tick_rate = tick_rate
         self._players: dict[UUID, _LobbyPlayer] = {}
+        self._countdown_remaining: float | None = None
+        self._last_broadcast_second: int | None = None
 
     # ── Incoming message handlers ─────────────────────────────────────────────
 
@@ -73,7 +78,7 @@ class LobbyManager:
             WelcomeMsg(assigned_player_id=pid, tick_rate=self._tick_rate).encode(),
             CHANNEL_RELIABLE,
         )
-        self._broadcast_lobby()
+        self._sync_countdown()
 
     def on_ready(self, peer_id: UUID, ready: bool) -> None:
         """Update a player's ready state and broadcast the lobby.
@@ -87,7 +92,7 @@ class LobbyManager:
         """
         if player := self._players.get(peer_id):
             player.ready = ready
-            self._broadcast_lobby()
+            self._sync_countdown()
 
     def on_colour(self, peer_id: UUID, colour: Colour) -> None:
         """Update a player's chosen colour and broadcast the lobby.
@@ -132,11 +137,13 @@ class LobbyManager:
             Identifier of the peer that disconnected.
         """
         self._players.pop(peer_id, None)
-        self._broadcast_lobby()
+        self._sync_countdown()
 
     def reset(self) -> None:
         """Remove all players from the lobby, clearing it for reuse."""
         self._players.clear()
+        self._countdown_remaining = None
+        self._last_broadcast_second = None
 
     # ── State check ───────────────────────────────────────────────────────────
 
@@ -153,6 +160,53 @@ class LobbyManager:
             len(self._players) >= 2
             and all(p.ready for p in self._players.values())
         )
+
+    def countdown_seconds(self) -> int | None:
+        """Whole seconds remaining before the game auto-starts, or None if inactive."""
+        if self._countdown_remaining is None:
+            return None
+        return math.ceil(self._countdown_remaining)
+
+    def tick(self, dt: float) -> bool:
+        """Advance the ready countdown by `dt` seconds.
+
+        Broadcasts a lobby update whenever the displayed whole-second
+        value changes, so clients can render a live countdown.
+
+        Parameters
+        ----------
+        dt : float
+            Time elapsed, in seconds, since the last call.
+
+        Returns
+        -------
+        bool
+            True if the countdown has just elapsed and the game should
+            now be started.
+        """
+        if self._countdown_remaining is None:
+            return False
+        self._countdown_remaining -= dt
+        if self._countdown_remaining <= 0:
+            self._countdown_remaining = None
+            self._last_broadcast_second = None
+            return True
+        whole = math.ceil(self._countdown_remaining)
+        if whole != self._last_broadcast_second:
+            self._last_broadcast_second = whole
+            self._broadcast_lobby()
+        return False
+
+    def _sync_countdown(self) -> None:
+        """Start or cancel the ready countdown to match `should_start()`, then broadcast."""
+        if self.should_start():
+            if self._countdown_remaining is None:
+                self._countdown_remaining = READY_COUNTDOWN_SECONDS
+                self._last_broadcast_second = self.countdown_seconds()
+        else:
+            self._countdown_remaining = None
+            self._last_broadcast_second = None
+        self._broadcast_lobby()
 
     def build_initial_state(self, seed: int | None = None) -> GameState:
         """Build the initial `GameState` for a new match from the current lobby.
@@ -262,5 +316,5 @@ class LobbyManager:
              "colour_rgb": list(lp.colour.as_tuple())}
             for lp in self._players.values()
         ]
-        msg = LobbyUpdateMsg(players=players_list).encode()
+        msg = LobbyUpdateMsg(players=players_list, countdown=self.countdown_seconds()).encode()
         self._transport.broadcast(msg, CHANNEL_RELIABLE)
