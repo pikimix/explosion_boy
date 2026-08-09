@@ -394,8 +394,16 @@ class GameServer:
             )
 
     def _rebuild_space_from_state(self, state: GameState) -> PhysicsSpace:
-        """Create a fresh PhysicsSpace populated from a GameState snapshot."""
-        space = PhysicsSpace()
+        """Repopulate a PhysicsSpace from a GameState snapshot.
+
+        Reuses the existing space rather than constructing a new one so that
+        rebuild_static_walls can skip re-creating wall shapes when the tile
+        grid hasn't actually changed since the last rebuild (the common case
+        during a rollback replay).
+        """
+        space = self._space if self._space is not None else PhysicsSpace()
+        space.clear_players()
+        space.clear_bombs()
         space.rebuild_static_walls(state.tiles)
         for pid, phys in state.player_physics.items():
             space.add_player(pid, phys.x, phys.y)

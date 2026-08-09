@@ -54,6 +54,9 @@ class PhysicsSpace:
             Row-major grid of tile kind values; any value other than the
             passable tile kind gets a static wall shape.
         """
+        if tiles == self._tiles:
+            return
+
         for shape in self._static_shapes.values():
             self._space.remove(shape)
         self._static_shapes.clear()
@@ -202,6 +205,11 @@ class PhysicsSpace:
             return Velocity(v.x, v.y)
         return Velocity(0.0, 0.0)
 
+    def clear_players(self) -> None:
+        """Remove every player body from the space."""
+        for player_id in list(self._player_bodies):
+            self.remove_player(player_id)
+
     def has_player(self, player_id: int) -> bool:
         """Check whether a player currently has a body in the space.
 
@@ -275,6 +283,11 @@ class PhysicsSpace:
             pos = entry[0].position
             return Position(pos.x, pos.y)
         return None
+
+    def clear_bombs(self) -> None:
+        """Remove every bomb body from the space."""
+        for bomb_idx in list(self._bomb_bodies):
+            self.remove_bomb(bomb_idx)
 
     def bomb_indices(self) -> list[int]:
         """List the indices of all bombs currently in the space.
