@@ -5,7 +5,8 @@ Enums are serialised as their int value.
 """
 from __future__ import annotations
 
-from typing import Any
+import dataclasses
+from typing import Any, Callable, TypeVar
 
 import msgpack
 
@@ -28,31 +29,42 @@ from core.state import GameState
 # ── Encode ─────────────────────────────────────────────────────────────────────
 
 def _enc_physics(p: PhysicsState) -> list:
-    return [p.x, p.y, p.vx, p.vy]
+    return list(dataclasses.astuple(p))
 
 def _enc_stats(s: PlayerStats) -> list:
-    return [s.player_id, s.lives, s.bomb_capacity, s.bombs_in_use, s.blast_radius, s.shield,
-            s.reversed_controls_ticks, s.speed_level, s.has_super_bomb, s.has_cluster_bomb,
-            s.has_rubble_bomb, s.shield_invincibility_ticks, s.blast_penetration,
-            s.has_smoke_bomb]
+    return list(dataclasses.astuple(s))
 
 def _enc_bomb(b: BombComponent) -> list:
-    return [b.owner_id, b.fuse_ticks_remaining, b.blast_radius,
-            b.col, b.row, b.px, b.py, b.is_super, b.is_cluster, b.is_rubble,
-            b.blast_penetration, b.is_smoke]
+    return list(dataclasses.astuple(b))
 
 def _enc_exp_center(e: ExplosionCenter) -> list:
-    return [e.col, e.row, e.ticks_remaining]
+    return list(dataclasses.astuple(e))
 
 def _enc_exp_ray(r: ExplosionRay) -> list:
     return [r.origin_col, r.origin_row, r.direction[0], r.direction[1],
             r.length, r.ticks_remaining]
 
 def _enc_smoke(sc: SmokeCloud) -> list:
-    return [sc.col, sc.row, sc.radius, sc.ticks_remaining, sc.ticks_total]
+    return list(dataclasses.astuple(sc))
 
 def _enc_powerup(p: PowerupComponent) -> list:
     return [int(p.kind), p.col, p.row]
+
+
+V = TypeVar("V")
+
+
+def _enc_keyed(d: dict[int, V], enc: Callable[[V], Any] = lambda v: v) -> dict[str, Any]:
+    return {str(k): enc(v) for k, v in d.items()}
+
+def _dec_keyed(d: dict[str, Any], dec: Callable[[Any], V] = lambda v: v) -> dict[int, V]:
+    return {int(k): dec(v) for k, v in d.items()}
+
+def _enc_list(items: list[V], enc: Callable[[V], Any]) -> list[Any]:
+    return [enc(x) for x in items]
+
+def _dec_list(items: list[Any], dec: Callable[[Any], V]) -> list[V]:
+    return [dec(x) for x in items]
 
 
 def encode_state(gs: GameState) -> bytes:
@@ -79,17 +91,17 @@ def encode_state(gs: GameState) -> bytes:
         "mr": gs.map_rows,
         "tv": gs.tiles_version,
         "tl": gs.tile_list_cache,
-        "pl": {str(k): _enc_stats(v) for k, v in gs.players.items()},
-        "pp": {str(k): _enc_physics(v) for k, v in gs.player_physics.items()},
-        "bm": [_enc_bomb(b) for b in gs.bombs],
-        "ex": [_enc_exp_center(e) for e in gs.explosions],
+        "pl": _enc_keyed(gs.players, _enc_stats),
+        "pp": _enc_keyed(gs.player_physics, _enc_physics),
+        "bm": _enc_list(gs.bombs, _enc_bomb),
+        "ex": _enc_list(gs.explosions, _enc_exp_center),
         "er": [_enc_exp_ray(r) for r in gs.explosion_rays],
-        "sm": [_enc_smoke(sc) for sc in gs.smoke_clouds],
+        "sm": _enc_list(gs.smoke_clouds, _enc_smoke),
         "pw": [_enc_powerup(p) for p in gs.powerups],
         "ph": int(gs.phase),
         "wi": gs.winner_id,
-        "pn": {str(k): v for k, v in gs.player_names.items()},
-        "pc": {str(k): list(v.as_tuple()) for k, v in gs.player_colours.items()},
+        "pn": _enc_keyed(gs.player_names),
+        "pc": _enc_keyed(gs.player_colours, lambda v: list(v.as_tuple())),
         "spc": gs.starting_player_count,
         "sa": gs.shrink_active,
         "sr": gs.shrink_ring,
@@ -124,18 +136,18 @@ def decode_state(data: bytes) -> GameState:
         map_rows=d["mr"],
         tiles_version=d.get("tv", 0),
         tiles=[[TileKind(c) for c in row] for row in d["tl"]],
-        players={int(k): PlayerStats(*v) for k, v in d["pl"].items()},
-        player_physics={int(k): PhysicsState(*v) for k, v in d["pp"].items()},
-        bombs=[BombComponent(*b) for b in d["bm"]],
-        explosions=[ExplosionCenter(*e) for e in d["ex"]],
+        players=_dec_keyed(d["pl"], lambda v: PlayerStats(*v)),
+        player_physics=_dec_keyed(d["pp"], lambda v: PhysicsState(*v)),
+        bombs=_dec_list(d["bm"], lambda b: BombComponent(*b)),
+        explosions=_dec_list(d["ex"], lambda e: ExplosionCenter(*e)),
         explosion_rays=[
             ExplosionRay(r[0], r[1], (r[2], r[3]), r[4], r[5])
             for r in d["er"]
         ],
-        smoke_clouds=[SmokeCloud(*s) for s in d["sm"]],
+        smoke_clouds=_dec_list(d["sm"], lambda s: SmokeCloud(*s)),
         powerups=[PowerupComponent(PowerupKind(p[0]), p[1], p[2]) for p in d["pw"]],
-        player_names={int(k): v for k, v in d.get("pn", {}).items()},
-        player_colours={int(k): Colour(*v) for k, v in d.get("pc", {}).items()},
+        player_names=_dec_keyed(d.get("pn", {})),
+        player_colours=_dec_keyed(d.get("pc", {}), lambda v: Colour(*v)),
         phase=GamePhase(d["ph"]),
         winner_id=d["wi"],
         starting_player_count=d.get("spc", 0),
