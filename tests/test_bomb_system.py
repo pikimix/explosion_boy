@@ -1,5 +1,7 @@
 """Tests for bomb placement: capacity gating and special-bomb-type flags."""
 
+import pymunk
+
 from core.components import BombComponent, PhysicsState, PlayerInput, PlayerStats, TileKind
 from core.state import GameState
 from engine.physics import PhysicsSpace
@@ -138,20 +140,32 @@ def test_remove_bombs_with_nothing_to_remove_is_noop() -> None:
 
 def test_remove_bombs_rekeys_survivors_without_recreating_bodies() -> None:
     """Regression: removing one bomb used to tear down and recreate every
-    surviving bomb's pymunk body to keep indices aligned with state.bombs,
-    resetting their velocity to zero. A bomb mid-flight from a push would
-    snap to a dead stop whenever any *other* bomb detonated. Survivors must
-    keep their existing body/shape (and velocity) and just be re-keyed."""
+    surviving bomb's pymunk body just to keep indices aligned with
+    state.bombs — needless allocation churn on every detonation. Survivors
+    must keep their existing body/shape and just be re-keyed."""
     state = _make_empty_state()
     space = _make_space(state)
     for col, row in [(1, 1), (2, 2), (3, 3)]:
         _add_bomb(state, space, col, row)
     survivor_body, survivor_shape = space._bomb_bodies[2]
-    survivor_body.velocity = (40.0, 0.0)
 
     remove_bombs(state, space, [1])  # detonate the middle bomb
 
     assert len(state.bombs) == 2
     assert set(space.bomb_indices()) == {0, 1}
     assert space._bomb_bodies[1] == (survivor_body, survivor_shape)
-    assert space._bomb_bodies[1][0].velocity.x == 40.0
+
+
+def test_bomb_bodies_are_immovable_and_do_not_block_players() -> None:
+    """Bombs are not physics obstacles at all: they used to hand the player
+    collision an impulse (making them slide once hit) and, once made static,
+    still physically blocked player movement. Bomb bodies must be static
+    (nothing can move them) and their shape a sensor (nothing collides with
+    them, so players walk straight through)."""
+    state = _make_empty_state()
+    space = _make_space(state)
+    _add_bomb(state, space, col=1, row=1)
+    body, shape = space._bomb_bodies[0]
+
+    assert body.body_type == pymunk.Body.STATIC
+    assert shape.sensor is True

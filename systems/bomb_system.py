@@ -110,28 +110,6 @@ def apply_new_bombs(
         bomb_cells.add(Cell(col, row))
 
 
-def sync_pushed_bombs(state: GameState, space: PhysicsSpace) -> None:
-    """Snap slow-moving bombs back to grid and update col/row."""
-    for i, bomb in enumerate(state.bombs):
-        pos = space.get_bomb_position(i)
-        if pos is None:
-            continue
-        bx, by = pos.x, pos.y
-        # If velocity is below threshold, snap to nearest cell centre
-        speed = (bomb.vx ** 2 + bomb.vy ** 2) ** 0.5
-        if speed < 5.0:
-            col = round((bx - TILE_SIZE / 2) / TILE_SIZE)
-            row = round((by - TILE_SIZE / 2) / TILE_SIZE)
-            snap_x = col * TILE_SIZE + TILE_SIZE / 2
-            snap_y = row * TILE_SIZE + TILE_SIZE / 2
-            bomb.px, bomb.py = snap_x, snap_y
-            bomb.col, bomb.row = col, row
-        else:
-            bomb.px, bomb.py = bx, by
-            bomb.col = int(bx // TILE_SIZE)
-            bomb.row = int(by // TILE_SIZE)
-
-
 def process_fuses(state: GameState) -> list[DetonationEvent]:
     """Count down every bomb's fuse and collect those that have expired.
 

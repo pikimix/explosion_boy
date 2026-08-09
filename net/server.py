@@ -40,7 +40,6 @@ from engine.transport import (
 from systems.bomb_system import (
     apply_new_bombs,
     process_fuses,
-    sync_pushed_bombs,
 )
 from systems.collision import sync_grid_positions
 from systems.event_bus import EventBus, PlayerDiedEvent
@@ -328,7 +327,6 @@ class GameServer:
         tick_explosions(self._state)
         tick_smoke_clouds(self._state)  # independent of tick_explosions
         apply_new_bombs(self._state, self._space, inputs)
-        sync_pushed_bombs(self._state, self._space)
         detonations = process_fuses(self._state)
         det_start = time.perf_counter() if self._profile else 0.0
         process_detonations(self._state, self._space, detonations, self._bus)

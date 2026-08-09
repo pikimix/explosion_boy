@@ -12,7 +12,6 @@ import pymunk
 
 from core.components import Cell, Position, Velocity
 from engine.config import (
-    BOMB_FRICTION,
     BOMB_HALF_SIZE,
     PLAYER_DAMPING,
     PLAYER_RADIUS,
@@ -38,10 +37,6 @@ class PhysicsSpace:
         self._bomb_bodies: dict[int, tuple[pymunk.Body, pymunk.Shape]] = {}
         self._static_shapes: dict[Cell, pymunk.Shape] = {}
         self._tiles: list[list[int]] = []
-
-        # Collision handler: player (type 1) pushes bomb (type 2)
-        handler = self._space.add_collision_handler(1, 2)
-        handler.post_solve = self._on_player_bomb_collision
 
     # ── Tile walls ────────────────────────────────────────────────────────────
 
@@ -135,7 +130,6 @@ class PhysicsSpace:
         shape = pymunk.Circle(body, PLAYER_RADIUS)
         shape.elasticity = 0.0
         shape.friction = 0.8
-        shape.collision_type = 1
         self._space.add(body, shape)
         self._player_bodies[player_id] = (body, shape)
 
@@ -240,15 +234,10 @@ class PhysicsSpace:
             Initial y position, in pixels.
         """
         size = BOMB_HALF_SIZE * 2
-        body = pymunk.Body(
-            mass=0.5,
-            moment=pymunk.moment_for_box(0.5, (size, size)),
-        )
+        body = pymunk.Body(body_type=pymunk.Body.STATIC)
         body.position = (px, py)
         shape = pymunk.Poly.create_box(body, (size, size))
-        shape.elasticity = 0.2
-        shape.friction = BOMB_FRICTION
-        shape.collision_type = 2
+        shape.sensor = True  # detectable position only — never blocks or is pushed
         self._space.add(body, shape)
         self._bomb_bodies[bomb_idx] = (body, shape)
 
@@ -370,25 +359,3 @@ class PhysicsSpace:
 
             body.position = (x, y)
             body.velocity = (vx, vy)
-
-    # ── Collision callbacks ───────────────────────────────────────────────────
-
-    def _on_player_bomb_collision(
-        self, arbiter: pymunk.Arbiter, space: pymunk.Space, data: object
-    ) -> None:
-        """Transfer an impulse from the player body to the bomb body."""
-        if len(arbiter.shapes) < 2:
-            return
-        player_shape, bomb_shape = arbiter.shapes[0], arbiter.shapes[1]
-        if player_shape.collision_type != 1:
-            player_shape, bomb_shape = bomb_shape, player_shape
-
-        pv = player_shape.body.velocity
-        n = arbiter.normal
-        # Project player velocity onto contact normal and apply as impulse to bomb
-        dot = pv.x * n.x + pv.y * n.y
-        if dot > 0:
-            bomb_shape.body.apply_impulse_at_local_point(
-                (n.x * dot * bomb_shape.body.mass,
-                 n.y * dot * bomb_shape.body.mass)
-            )

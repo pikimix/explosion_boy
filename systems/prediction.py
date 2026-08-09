@@ -152,7 +152,7 @@ class PredictionEngine:
             self._confirmed_tiles = state.tiles
             self._tiles_version = state.tiles_version
 
-        # Bomb shapes (for push interaction)
+        # Bomb shapes (static obstacles)
         for i, bomb in enumerate(state.bombs):
             self._space.add_bomb(i, bomb.px, bomb.py)
 

@@ -13,7 +13,7 @@ from core.components import Colour
 from core.serialiser import decode_msg, encode_msg, decode_state
 from core.state import GameState
 
-PROTOCOL_VERSION: int = 4
+PROTOCOL_VERSION: int = 5
 
 # ── Client → Server ────────────────────────────────────────────────────────────
 

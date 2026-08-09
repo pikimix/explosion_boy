@@ -38,7 +38,7 @@ def _enc_stats(s: PlayerStats) -> list:
 
 def _enc_bomb(b: BombComponent) -> list:
     return [b.owner_id, b.fuse_ticks_remaining, b.blast_radius,
-            b.col, b.row, b.px, b.py, b.vx, b.vy, b.is_super, b.is_cluster, b.is_rubble,
+            b.col, b.row, b.px, b.py, b.is_super, b.is_cluster, b.is_rubble,
             b.blast_penetration, b.is_smoke]
 
 def _enc_exp_center(e: ExplosionCenter) -> list:

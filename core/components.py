@@ -112,8 +112,6 @@ class BombComponent:
     row: int
     px: float
     py: float
-    vx: float = 0.0
-    vy: float = 0.0
     is_super:          bool = False
     is_cluster:        bool = False
     is_rubble:         bool = False

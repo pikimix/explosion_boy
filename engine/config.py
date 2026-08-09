@@ -48,8 +48,6 @@ MAX_GRID_SIZE = 29   # square grid side at MAX_PLAYERS
 MAX_PLAYER_SPEED = 180.0        # pixels per second
 PLAYER_RADIUS = TILE_SIZE * 0.38
 BOMB_HALF_SIZE = TILE_SIZE * 0.4
-PUSH_IMPULSE = 250.0            # impulse transferred to bomb on contact
-BOMB_FRICTION = 3.0
 PLAYER_DAMPING = 0.25           # pymunk body velocity damping factor
 
 # 16 spawn points on a 29×25 grid — ordered so N-player games use first N.
