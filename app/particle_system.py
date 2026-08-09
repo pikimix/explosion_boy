@@ -16,6 +16,7 @@ from pathlib import Path
 import arcade
 from arcade.gl import BufferDescription
 
+from app.gfx_base import try_init_shader_effect
 from core.state import GameState
 from engine.config import TILE_SIZE
 
@@ -164,19 +165,7 @@ class ExplosionParticleSystem:
 
         Returns False on any failure so the system degrades gracefully.
         """
-        if _force_disabled:
-            _log.info('Particle system disabled via --no-shader flag.')
-            return False
-
-        ctx = arcade.get_window().ctx
-        gl_ver: tuple[int, int] | None = getattr(ctx, 'gl_version', None)
-        if gl_ver is not None and gl_ver < (3, 3):
-            _log.warning(
-                'Particle system disabled — OpenGL %d.%d detected, 3.3 required.',
-                *gl_ver,
-            )
-            return False
-        try:
+        def build(ctx) -> None:
             vert_src = (_SHADER_DIR / 'explosion_particles.vert').read_text()
             frag_src = (_SHADER_DIR / 'explosion_particles.frag').read_text()
             self._program = ctx.program(
@@ -191,14 +180,8 @@ class ExplosionParticleSystem:
                 [BufferDescription(self._vbo, '2f 1f 1f', ['in_pos', 'in_life', 'in_size'])]
             )
             ctx.enable(_GL_PROGRAM_POINT_SIZE)
-            if gl_ver is not None:
-                _log.info('Explosion particle system initialised (OpenGL %d.%d).', *gl_ver)
-            else:
-                _log.info('Explosion particle system initialised.')
-            return True
-        except Exception:
-            _log.warning(
-                'Particle system disabled — shader load or compilation failed.',
-                exc_info=True,
-            )
-            return False
+
+        return try_init_shader_effect(
+            _log, 'Particle system', _force_disabled, build,
+            success_label='Explosion particle system',
+        )

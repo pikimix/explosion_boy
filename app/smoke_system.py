@@ -17,6 +17,7 @@ from pathlib import Path
 import arcade
 from arcade.gl.geometry import quad_2d
 
+from app.gfx_base import try_init_shader_effect
 from core.state import GameState
 from engine.config import TILE_SIZE
 
@@ -85,31 +86,10 @@ class SmokeCloudSystem:
 
         Returns False on any failure so the effect degrades gracefully.
         """
-        if _force_disabled:
-            _log.info('Smoke cloud effect disabled via --no-shader flag.')
-            return False
-
-        ctx = arcade.get_window().ctx
-        gl_ver: tuple[int, int] | None = getattr(ctx, 'gl_version', None)
-        if gl_ver is not None and gl_ver < (3, 3):
-            _log.warning(
-                'Smoke cloud effect disabled — OpenGL %d.%d detected, 3.3 required.',
-                *gl_ver,
-            )
-            return False
-        try:
+        def build(ctx) -> None:
             vert_src = (_SHADER_DIR / 'smoke.vert').read_text()
             frag_src = (_SHADER_DIR / 'smoke.frag').read_text()
             self._program = ctx.program(vertex_shader=vert_src, fragment_shader=frag_src)
             self._quad = quad_2d(size=(1.0, 1.0))
-            if gl_ver is not None:
-                _log.info('Smoke cloud effect initialised (OpenGL %d.%d).', *gl_ver)
-            else:
-                _log.info('Smoke cloud effect initialised.')
-            return True
-        except Exception:
-            _log.warning(
-                'Smoke cloud effect disabled — shader load or compilation failed.',
-                exc_info=True,
-            )
-            return False
+
+        return try_init_shader_effect(_log, 'Smoke cloud effect', _force_disabled, build)

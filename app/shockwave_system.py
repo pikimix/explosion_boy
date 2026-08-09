@@ -16,6 +16,7 @@ import arcade
 from arcade.gl import Framebuffer
 from arcade.gl.geometry import quad_2d_fs
 
+from app.gfx_base import try_init_shader_effect
 from core.state import GameState
 from engine.config import (
     SHOCKWAVE_DISTORTION_STRENGTH, SHOCKWAVE_LIFETIME_SECONDS,
@@ -228,31 +229,10 @@ class ShockwaveSystem:
 
         Returns False on any failure so the effect degrades gracefully.
         """
-        if _force_disabled:
-            _log.info('Shockwave effect disabled via --no-shader flag.')
-            return False
-
-        ctx = arcade.get_window().ctx
-        gl_ver: tuple[int, int] | None = getattr(ctx, 'gl_version', None)
-        if gl_ver is not None and gl_ver < (3, 3):
-            _log.warning(
-                'Shockwave effect disabled — OpenGL %d.%d detected, 3.3 required.',
-                *gl_ver,
-            )
-            return False
-        try:
+        def build(ctx) -> None:
             vert_src = (_SHADER_DIR / 'shockwave.vert').read_text()
             frag_src = (_SHADER_DIR / 'shockwave.frag').read_text()
             self._program = ctx.program(vertex_shader=vert_src, fragment_shader=frag_src)
             self._quad = quad_2d_fs()
-            if gl_ver is not None:
-                _log.info('Shockwave effect initialised (OpenGL %d.%d).', *gl_ver)
-            else:
-                _log.info('Shockwave effect initialised.')
-            return True
-        except Exception:
-            _log.warning(
-                'Shockwave effect disabled — shader load or compilation failed.',
-                exc_info=True,
-            )
-            return False
+
+        return try_init_shader_effect(_log, 'Shockwave effect', _force_disabled, build)
