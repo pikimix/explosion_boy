@@ -19,6 +19,11 @@ class TickClock:
         """Return the current tick number."""
         return self._tick
 
+    @property
+    def tick_dt(self) -> float:
+        """Return the fixed timestep duration, in seconds."""
+        return self._tick_dt
+
     def should_tick(self) -> bool:
         """Check whether enough time has elapsed for the next tick to fire.
 

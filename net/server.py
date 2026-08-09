@@ -83,7 +83,6 @@ class GameServer:
         self._profile_encode_ms = 0.0
         self._profile_max_tick_ms = 0.0
         self._tick_rate = tick_rate
-        self._tick_dt = 1.0 / tick_rate
         self._rollback_buffer_size = rollback_buffer_size
         self._clock = TickClock(tick_rate)
         self._state: GameState | None = None
@@ -322,7 +321,7 @@ class GameServer:
             return
 
         self._state.tick = tick
-        process_movement(self._state, self._space, inputs, self._tick_dt)
+        process_movement(self._state, self._space, inputs, self._clock.tick_dt)
         sync_grid_positions(self._state)
         tick_explosions(self._state)
         tick_smoke_clouds(self._state)  # independent of tick_explosions
