@@ -21,6 +21,48 @@ from engine.config import (
 _PASSABLE_TILE = 0   # TileKind.EMPTY — avoid importing core here
 
 
+class _BodyRegistry:
+    """Tracks a space's bodies/shapes by an integer key (player id or bomb index)."""
+
+    def __init__(self, space: pymunk.Space) -> None:
+        self._space = space
+        self._entries: dict[int, tuple[pymunk.Body, pymunk.Shape]] = {}
+
+    def add(self, key: int, body: pymunk.Body, shape: pymunk.Shape) -> None:
+        self._space.add(body, shape)
+        self._entries[key] = (body, shape)
+
+    def remove(self, key: int) -> None:
+        entry = self._entries.pop(key, None)
+        if entry:
+            self._space.remove(*entry)
+
+    def get(self, key: int) -> tuple[pymunk.Body, pymunk.Shape] | None:
+        return self._entries.get(key)
+
+    def get_position(self, key: int) -> Position | None:
+        if entry := self._entries.get(key):
+            pos = entry[0].position
+            return Position(pos.x, pos.y)
+        return None
+
+    def has(self, key: int) -> bool:
+        return key in self._entries
+
+    def values(self):
+        return self._entries.values()
+
+    def keys(self) -> list[int]:
+        return list(self._entries.keys())
+
+    def clear(self) -> None:
+        for key in list(self._entries):
+            self.remove(key)
+
+    def rekey(self, mapping: dict[int, int]) -> None:
+        self._entries = {mapping[old]: entry for old, entry in self._entries.items()}
+
+
 class PhysicsSpace:
     """Wrapper around a pymunk ``Space`` managing players, bombs, and tile walls.
 
@@ -33,8 +75,8 @@ class PhysicsSpace:
         self._space = pymunk.Space()
         self._space.gravity = (0, 0)
         self._space.damping = PLAYER_DAMPING
-        self._player_bodies: dict[int, tuple[pymunk.Body, pymunk.Shape]] = {}
-        self._bomb_bodies: dict[int, tuple[pymunk.Body, pymunk.Shape]] = {}
+        self._player_bodies = _BodyRegistry(self._space)
+        self._bomb_bodies = _BodyRegistry(self._space)
         self._static_shapes: dict[Cell, pymunk.Shape] = {}
         self._tiles: list[list[int]] = []
 
@@ -130,8 +172,7 @@ class PhysicsSpace:
         shape = pymunk.Circle(body, PLAYER_RADIUS)
         shape.elasticity = 0.0
         shape.friction = 0.8
-        self._space.add(body, shape)
-        self._player_bodies[player_id] = (body, shape)
+        self._player_bodies.add(player_id, body, shape)
 
     def remove_player(self, player_id: int) -> None:
         """Remove a player's body and shape from the space, if present.
@@ -141,10 +182,7 @@ class PhysicsSpace:
         player_id : int
             Identifier of the player to remove.
         """
-        entry = self._player_bodies.pop(player_id, None)
-        if entry:
-            body, shape = entry
-            self._space.remove(body, shape)
+        self._player_bodies.remove(player_id)
 
     def set_player_velocity(self, player_id: int, vx: float, vy: float) -> None:
         """Set a player body's velocity directly.
@@ -175,10 +213,7 @@ class PhysicsSpace:
             The player's position in pixels, or None if the player has no
             body in the space.
         """
-        if entry := self._player_bodies.get(player_id):
-            pos = entry[0].position
-            return Position(pos.x, pos.y)
-        return None
+        return self._player_bodies.get_position(player_id)
 
     def get_player_velocity(self, player_id: int) -> Velocity:
         """Get a player's current velocity.
@@ -201,8 +236,7 @@ class PhysicsSpace:
 
     def clear_players(self) -> None:
         """Remove every player body from the space."""
-        for player_id in list(self._player_bodies):
-            self.remove_player(player_id)
+        self._player_bodies.clear()
 
     def has_player(self, player_id: int) -> bool:
         """Check whether a player currently has a body in the space.
@@ -217,7 +251,7 @@ class PhysicsSpace:
         bool
             True if the player has a body in the space.
         """
-        return player_id in self._player_bodies
+        return self._player_bodies.has(player_id)
 
     # ── Bombs ─────────────────────────────────────────────────────────────────
 
@@ -238,8 +272,7 @@ class PhysicsSpace:
         body.position = (px, py)
         shape = pymunk.Poly.create_box(body, (size, size))
         shape.sensor = True  # detectable position only — never blocks or is pushed
-        self._space.add(body, shape)
-        self._bomb_bodies[bomb_idx] = (body, shape)
+        self._bomb_bodies.add(bomb_idx, body, shape)
 
     def remove_bomb(self, bomb_idx: int) -> None:
         """Remove a bomb's body and shape from the space, if present.
@@ -249,10 +282,7 @@ class PhysicsSpace:
         bomb_idx : int
             Index of the bomb to remove.
         """
-        entry = self._bomb_bodies.pop(bomb_idx, None)
-        if entry:
-            body, shape = entry
-            self._space.remove(body, shape)
+        self._bomb_bodies.remove(bomb_idx)
 
     def get_bomb_position(self, bomb_idx: int) -> Position | None:
         """Get a bomb's current position.
@@ -268,10 +298,7 @@ class PhysicsSpace:
             The bomb's position in pixels, or None if the bomb has no
             body in the space.
         """
-        if entry := self._bomb_bodies.get(bomb_idx):
-            pos = entry[0].position
-            return Position(pos.x, pos.y)
-        return None
+        return self._bomb_bodies.get_position(bomb_idx)
 
     def rekey_bombs(self, mapping: dict[int, int]) -> None:
         """Renumber bomb bodies from old indices to new indices in place.
@@ -282,12 +309,11 @@ class PhysicsSpace:
             Old bomb index -> new bomb index; must map every currently
             registered bomb index exactly once.
         """
-        self._bomb_bodies = {mapping[old]: entry for old, entry in self._bomb_bodies.items()}
+        self._bomb_bodies.rekey(mapping)
 
     def clear_bombs(self) -> None:
         """Remove every bomb body from the space."""
-        for bomb_idx in list(self._bomb_bodies):
-            self.remove_bomb(bomb_idx)
+        self._bomb_bodies.clear()
 
     def bomb_indices(self) -> list[int]:
         """List the indices of all bombs currently in the space.
@@ -297,7 +323,7 @@ class PhysicsSpace:
         list of int
             Indices of bombs with bodies in the space.
         """
-        return list(self._bomb_bodies.keys())
+        return self._bomb_bodies.keys()
 
     # ── Step ──────────────────────────────────────────────────────────────────
 

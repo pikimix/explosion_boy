@@ -24,6 +24,21 @@ class DetonationEvent:
     blast_penetration: int  = 1
     is_smoke:          bool = False
 
+    @classmethod
+    def from_bomb(cls, bomb_idx: int, bomb: BombComponent) -> "DetonationEvent":
+        """Build a DetonationEvent from a bomb's current stats at `bomb_idx`."""
+        return cls(
+            bomb_idx=bomb_idx,
+            col=bomb.col, row=bomb.row,
+            blast_radius=bomb.blast_radius,
+            owner_id=bomb.owner_id,
+            is_super=bomb.is_super,
+            is_cluster=bomb.is_cluster,
+            is_rubble=bomb.is_rubble,
+            blast_penetration=bomb.blast_penetration,
+            is_smoke=bomb.is_smoke,
+        )
+
 
 def apply_new_bombs(
     state: GameState,
@@ -128,17 +143,7 @@ def process_fuses(state: GameState) -> list[DetonationEvent]:
     for i, bomb in enumerate(state.bombs):
         bomb.fuse_ticks_remaining -= 1
         if bomb.fuse_ticks_remaining <= 0:
-            detonations.append(DetonationEvent(
-                bomb_idx=i,
-                col=bomb.col, row=bomb.row,
-                blast_radius=bomb.blast_radius,
-                owner_id=bomb.owner_id,
-                is_super=bomb.is_super,
-                is_cluster=bomb.is_cluster,
-                is_rubble=bomb.is_rubble,
-                blast_penetration=bomb.blast_penetration,
-                is_smoke=bomb.is_smoke,
-            ))
+            detonations.append(DetonationEvent.from_bomb(i, bomb))
     return detonations
 
 

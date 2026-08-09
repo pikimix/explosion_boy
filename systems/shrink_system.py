@@ -18,7 +18,8 @@ from engine.config import (
 from engine.physics import PhysicsSpace
 from systems.bomb_system import remove_bombs
 from systems.collision import players_at
-from systems.event_bus import EventBus, PlayerDiedEvent
+from systems.event_bus import EventBus
+from systems.players import kill_players
 from systems.world import map_size_for_player_count, ring_cells
 
 
@@ -73,11 +74,7 @@ def _close_ring(state: GameState, space: PhysicsSpace, bus: EventBus, ring: int)
     if bomb_indices:
         remove_bombs(state, space, bomb_indices)
 
-    for pid in dead:
-        state.players.pop(pid, None)
-        state.player_physics.pop(pid, None)
-    for pid in dead:
-        bus.emit(PlayerDiedEvent(pid, state.tick))
+    kill_players(state, bus, dead)
 
 
 def process_perimeter_shrink(state: GameState, space: PhysicsSpace, bus: EventBus) -> None:

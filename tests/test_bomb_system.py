@@ -131,11 +131,11 @@ def test_remove_bombs_with_nothing_to_remove_is_noop() -> None:
     state = _make_empty_state()
     space = _make_space(state)
     _add_bomb(state, space, col=1, row=1)
-    body, shape = space._bomb_bodies[0]
+    body, shape = space._bomb_bodies.get(0)
 
     remove_bombs(state, space, [])
 
-    assert space._bomb_bodies[0] == (body, shape)
+    assert space._bomb_bodies.get(0) == (body, shape)
 
 
 def test_remove_bombs_rekeys_survivors_without_recreating_bodies() -> None:
@@ -147,13 +147,13 @@ def test_remove_bombs_rekeys_survivors_without_recreating_bodies() -> None:
     space = _make_space(state)
     for col, row in [(1, 1), (2, 2), (3, 3)]:
         _add_bomb(state, space, col, row)
-    survivor_body, survivor_shape = space._bomb_bodies[2]
+    survivor_body, survivor_shape = space._bomb_bodies.get(2)
 
     remove_bombs(state, space, [1])  # detonate the middle bomb
 
     assert len(state.bombs) == 2
     assert set(space.bomb_indices()) == {0, 1}
-    assert space._bomb_bodies[1] == (survivor_body, survivor_shape)
+    assert space._bomb_bodies.get(1) == (survivor_body, survivor_shape)
 
 
 def test_bomb_bodies_are_immovable_and_do_not_block_players() -> None:
@@ -165,7 +165,7 @@ def test_bomb_bodies_are_immovable_and_do_not_block_players() -> None:
     state = _make_empty_state()
     space = _make_space(state)
     _add_bomb(state, space, col=1, row=1)
-    body, shape = space._bomb_bodies[0]
+    body, shape = space._bomb_bodies.get(0)
 
     assert body.body_type == pymunk.Body.STATIC
     assert shape.sensor is True

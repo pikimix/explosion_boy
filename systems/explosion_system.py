@@ -17,12 +17,8 @@ from engine.config import EXPLOSION_DURATION_TICKS, TICK_RATE, TILE_SIZE
 from engine.physics import PhysicsSpace
 from systems.bomb_system import DetonationEvent, remove_bombs
 from systems.collision import px_to_grid
-from systems.event_bus import (
-    BombDetonatedEvent,
-    EventBus,
-    PlayerDiedEvent,
-    SoftBlockDestroyedEvent,
-)
+from systems.event_bus import BombDetonatedEvent, EventBus, SoftBlockDestroyedEvent
+from systems.players import kill_players
 from systems.powerup_system import maybe_drop_powerup
 
 _DIRECTIONS = [(1, 0), (-1, 0), (0, 1), (0, -1)]
@@ -118,11 +114,7 @@ def process_detonations(
                         break
 
                     if tile == TileKind.SOFT_BLOCK:
-                        state.tiles[r][c] = TileKind.EMPTY
-                        state.tiles_dirty = True
-                        bus.emit(SoftBlockDestroyedEvent(c, r))
-                        maybe_drop_powerup(state, c, r)
-                        space.remove_wall(c, r)
+                        _destroy_soft_block(state, space, bus, c, r)
                         ray_len = dist
                         blocks_destroyed += 1
                         if blocks_destroyed >= det.blast_penetration:
@@ -132,18 +124,7 @@ def process_detonations(
                     # Check for chain-reacting bomb at this cell
                     bi = bomb_by_cell.get(Cell(c, r))
                     if bi is not None and bi not in processed_indices:
-                        bomb = state.bombs[bi]
-                        queue.append(DetonationEvent(
-                            bomb_idx=bi,
-                            col=bomb.col, row=bomb.row,
-                            blast_radius=bomb.blast_radius,
-                            owner_id=bomb.owner_id,
-                            is_super=bomb.is_super,
-                            is_cluster=bomb.is_cluster,
-                            is_rubble=bomb.is_rubble,
-                            blast_penetration=bomb.blast_penetration,
-                            is_smoke=bomb.is_smoke,
-                        ))
+                        queue.append(DetonationEvent.from_bomb(bi, state.bombs[bi]))
 
                     ray_len = dist
 
@@ -167,6 +148,51 @@ def process_detonations(
     _kill_players_in_explosions(state, bus)
 
 
+def _destroy_soft_block(state: GameState, space: PhysicsSpace, bus: EventBus, c: int, r: int) -> None:
+    """Clear a soft-block tile, roll its powerup drop, and remove its wall shape."""
+    state.tiles[r][c] = TileKind.EMPTY
+    state.tiles_dirty = True
+    bus.emit(SoftBlockDestroyedEvent(c, r))
+    maybe_drop_powerup(state, c, r)
+    space.remove_wall(c, r)
+
+
+def _aoe_blast(
+    state: GameState,
+    space: PhysicsSpace,
+    bus: EventBus,
+    det: DetonationEvent,
+    bomb_by_cell: dict[Cell, int],
+    queue: deque[DetonationEvent],
+    processed_indices: set[int],
+    lit_cells: set[Cell],
+    half: int,
+) -> list[Cell]:
+    """Light a `half`-radius square AOE around det's origin, passing through solid walls.
+
+    Marks each in-bounds cell lit, destroys any soft block there, and chain-reacts
+    any bomb caught inside. Returns the in-bounds cells covered, for callers (e.g.
+    rubble bombs) that need a further pass over the same area.
+    """
+    affected: list[Cell] = []
+    for dr in range(-half, half + 1):
+        for dc in range(-half, half + 1):
+            c, r = det.col + dc, det.row + dr
+            if not (0 <= r < state.map_rows and 0 <= c < state.map_cols):
+                continue
+            cell = Cell(c, r)
+            affected.append(cell)
+            if cell not in lit_cells:
+                lit_cells.add(cell)
+                state.explosions.append(ExplosionCenter(c, r, EXPLOSION_DURATION_TICKS))
+            if state.tiles[r][c] == TileKind.SOFT_BLOCK:
+                _destroy_soft_block(state, space, bus, c, r)
+            bi = bomb_by_cell.get(cell)
+            if bi is not None and bi not in processed_indices and bi != det.bomb_idx:
+                queue.append(DetonationEvent.from_bomb(bi, state.bombs[bi]))
+    return affected
+
+
 def _super_bomb_explosion(
     state: GameState,
     space: PhysicsSpace,
@@ -179,30 +205,7 @@ def _super_bomb_explosion(
 ) -> None:
     """AOE explosion scaled to half the owner's blast radius (min 5×5), passes through solid walls."""
     half = max(2, det.blast_radius // 2)
-    for dr in range(-half, half + 1):
-        for dc in range(-half, half + 1):
-            c, r = det.col + dc, det.row + dr
-            if not (0 <= r < state.map_rows and 0 <= c < state.map_cols):
-                continue
-            cell = Cell(c, r)
-            if cell not in lit_cells:
-                lit_cells.add(cell)
-                state.explosions.append(ExplosionCenter(c, r, EXPLOSION_DURATION_TICKS))
-            if state.tiles[r][c] == TileKind.SOFT_BLOCK:
-                state.tiles[r][c] = TileKind.EMPTY
-                state.tiles_dirty = True
-                bus.emit(SoftBlockDestroyedEvent(c, r))
-                maybe_drop_powerup(state, c, r)
-                space.remove_wall(c, r)
-            bi = bomb_by_cell.get(Cell(c, r))
-            if bi is not None and bi not in processed_indices and bi != det.bomb_idx:
-                b = state.bombs[bi]
-                queue.append(DetonationEvent(
-                    bomb_idx=bi, col=b.col, row=b.row,
-                    blast_radius=b.blast_radius, owner_id=b.owner_id,
-                    is_super=b.is_super, is_cluster=b.is_cluster, is_rubble=b.is_rubble,
-                    blast_penetration=b.blast_penetration, is_smoke=b.is_smoke,
-                ))
+    _aoe_blast(state, space, bus, det, bomb_by_cell, queue, processed_indices, lit_cells, half)
 
 
 def _rubble_bomb_explosion(
@@ -221,39 +224,10 @@ def _rubble_bomb_explosion(
     than halved, so collecting both upgrades the rubble bomb's reach.
     """
     half = det.blast_radius if det.is_super else max(2, det.blast_radius // 2)
-    affected: list[Cell] = []
-
-    for dr in range(-half, half + 1):
-        for dc in range(-half, half + 1):
-            c, r = det.col + dc, det.row + dr
-            if not (0 <= r < state.map_rows and 0 <= c < state.map_cols):
-                continue
-            cell = Cell(c, r)
-            affected.append(cell)
-            if cell not in lit_cells:
-                lit_cells.add(cell)
-                state.explosions.append(ExplosionCenter(c, r, EXPLOSION_DURATION_TICKS))
-            if state.tiles[r][c] == TileKind.SOFT_BLOCK:
-                state.tiles[r][c] = TileKind.EMPTY
-                state.tiles_dirty = True
-                bus.emit(SoftBlockDestroyedEvent(c, r))
-                maybe_drop_powerup(state, c, r)
-                space.remove_wall(c, r)
-            bi = bomb_by_cell.get(Cell(c, r))
-            if bi is not None and bi not in processed_indices and bi != det.bomb_idx:
-                b = state.bombs[bi]
-                queue.append(DetonationEvent(
-                    bomb_idx=bi, col=b.col, row=b.row,
-                    blast_radius=b.blast_radius, owner_id=b.owner_id,
-                    is_super=b.is_super, is_cluster=b.is_cluster, is_rubble=b.is_rubble,
-                    blast_penetration=b.blast_penetration, is_smoke=b.is_smoke,
-                ))
+    affected = _aoe_blast(state, space, bus, det, bomb_by_cell, queue, processed_indices, lit_cells, half)
 
     # Scatter new soft blocks on empty cells within the AOE (1-in-5 chance each)
-    player_cells = {
-        Cell(int(phys.x // TILE_SIZE), int(phys.y // TILE_SIZE))
-        for phys in state.player_physics.values()
-    }
+    player_cells = {px_to_grid(phys.x, phys.y) for phys in state.player_physics.values()}
     bomb_cells = {Cell(b.col, b.row) for b in state.bombs}
     for cell in affected:
         c, r = cell.col, cell.row
@@ -386,9 +360,4 @@ def _kill_players_in_explosions(state: GameState, bus: EventBus) -> None:
         else:
             dead.append(pid)
 
-    for pid in dead:
-        state.players.pop(pid, None)
-        state.player_physics.pop(pid, None)
-
-    for pid in dead:
-        bus.emit(PlayerDiedEvent(pid, state.tick))
+    kill_players(state, bus, dead)
