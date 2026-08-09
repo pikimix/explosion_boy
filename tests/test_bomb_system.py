@@ -1,9 +1,9 @@
 """Tests for bomb placement: capacity gating and special-bomb-type flags."""
 
-from core.components import PhysicsState, PlayerInput, PlayerStats, TileKind
+from core.components import BombComponent, PhysicsState, PlayerInput, PlayerStats, TileKind
 from core.state import GameState
 from engine.physics import PhysicsSpace
-from systems.bomb_system import apply_new_bombs, process_fuses
+from systems.bomb_system import apply_new_bombs, process_fuses, remove_bombs
 
 
 def _make_empty_state(cols: int = 15, rows: int = 15) -> GameState:
@@ -108,3 +108,50 @@ def test_process_fuses_copies_is_smoke_onto_detonation_event() -> None:
 
     assert len(detonations) == 1
     assert detonations[0].is_smoke is True
+
+
+def _add_bomb(state: GameState, space: PhysicsSpace, col: int, row: int) -> None:
+    px, py = col * 48 + 24, row * 48 + 24
+    idx = len(state.bombs)
+    state.bombs.append(BombComponent(
+        owner_id=0, fuse_ticks_remaining=10, blast_radius=2, col=col, row=row, px=px, py=py,
+    ))
+    space.add_bomb(idx, px, py)
+
+
+def test_remove_bombs_with_nothing_to_remove_is_noop() -> None:
+    """Regression: remove_bombs used to unconditionally reindex every bomb's
+    pymunk body, even when nothing detonated. Since process_detonations
+    calls remove_bombs on every tick regardless of whether anything actually
+    needs removing, this ran 60 times a second per active bomb — found via
+    py-spy as a hotspot that scaled with tick rate, not detonation rate. An
+    empty index list must leave existing bomb bodies untouched."""
+    state = _make_empty_state()
+    space = _make_space(state)
+    _add_bomb(state, space, col=1, row=1)
+    body, shape = space._bomb_bodies[0]
+
+    remove_bombs(state, space, [])
+
+    assert space._bomb_bodies[0] == (body, shape)
+
+
+def test_remove_bombs_rekeys_survivors_without_recreating_bodies() -> None:
+    """Regression: removing one bomb used to tear down and recreate every
+    surviving bomb's pymunk body to keep indices aligned with state.bombs,
+    resetting their velocity to zero. A bomb mid-flight from a push would
+    snap to a dead stop whenever any *other* bomb detonated. Survivors must
+    keep their existing body/shape (and velocity) and just be re-keyed."""
+    state = _make_empty_state()
+    space = _make_space(state)
+    for col, row in [(1, 1), (2, 2), (3, 3)]:
+        _add_bomb(state, space, col, row)
+    survivor_body, survivor_shape = space._bomb_bodies[2]
+    survivor_body.velocity = (40.0, 0.0)
+
+    remove_bombs(state, space, [1])  # detonate the middle bomb
+
+    assert len(state.bombs) == 2
+    assert set(space.bomb_indices()) == {0, 1}
+    assert space._bomb_bodies[1] == (survivor_body, survivor_shape)
+    assert space._bomb_bodies[1][0].velocity.x == 40.0

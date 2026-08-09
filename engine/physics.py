@@ -284,6 +284,17 @@ class PhysicsSpace:
             return Position(pos.x, pos.y)
         return None
 
+    def rekey_bombs(self, mapping: dict[int, int]) -> None:
+        """Renumber bomb bodies from old indices to new indices in place.
+
+        Parameters
+        ----------
+        mapping : dict of int to int
+            Old bomb index -> new bomb index; must map every currently
+            registered bomb index exactly once.
+        """
+        self._bomb_bodies = {mapping[old]: entry for old, entry in self._bomb_bodies.items()}
+
     def clear_bombs(self) -> None:
         """Remove every bomb body from the space."""
         for bomb_idx in list(self._bomb_bodies):

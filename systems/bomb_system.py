@@ -170,6 +170,8 @@ def remove_bombs(
     indices: list[int],
 ) -> None:
     """Remove bombs by index (highest first to preserve indices)."""
+    if not indices:
+        return
     for i in sorted(indices, reverse=True):
         if i < len(state.bombs):
             bomb = state.bombs[i]
@@ -178,13 +180,18 @@ def remove_bombs(
                 owner.bombs_in_use -= 1
             space.remove_bomb(i)
             state.bombs.pop(i)
-    # Re-register remaining bomb bodies so indices stay consistent
-    _reindex_bomb_bodies(state, space)
+    # Re-key remaining bomb bodies so indices stay consistent
+    _reindex_bomb_bodies(space)
 
 
-def _reindex_bomb_bodies(state: GameState, space: PhysicsSpace) -> None:
-    """After removal, re-add bomb bodies at correct indices."""
-    for idx in list(space.bomb_indices()):
-        space.remove_bomb(idx)
-    for i, bomb in enumerate(state.bombs):
-        space.add_bomb(i, bomb.px, bomb.py)
+def _reindex_bomb_bodies(space: PhysicsSpace) -> None:
+    """Renumber surviving bomb bodies to close the gaps left by removed ones.
+
+    The caller already removed each detonated bomb's physics body by its old
+    index; the survivors are still keyed by their old index, which no longer
+    matches their compacted position in state.bombs. Re-key them in place —
+    no pymunk body/shape recreation — so bombs unrelated to the removal keep
+    their momentum instead of getting reset to a stop.
+    """
+    old_indices = sorted(space.bomb_indices())
+    space.rekey_bombs({old: new for new, old in enumerate(old_indices)})
