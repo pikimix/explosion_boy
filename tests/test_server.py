@@ -8,29 +8,10 @@ from net.protocol import JoinMsg, PROTOCOL_VERSION, RejectMsg, decode_any
 from net.server import GameServer
 
 
-class _FakeServerTransport:
-    def __init__(self):
-        self.sent: list[tuple] = []
-        self.disconnected: list = []
-
-    def poll(self, timeout: float = 0):
-        """Return no pending events, satisfying the transport polling interface."""
-        return []
-
-    def send(self, peer_id, data, channel):
-        self.sent.append((peer_id, data, channel))
-
-    def broadcast(self, data, channel):
-        pass
-
-    def disconnect(self, peer_id):
-        self.disconnected.append(peer_id)
-
-
-def test_join_with_mismatched_protocol_version_is_rejected():
+def test_join_with_mismatched_protocol_version_is_rejected(fake_server_transport):
     """A client whose protocol version doesn't match the server's is sent a
     RejectMsg and disconnected, without being admitted to the lobby."""
-    transport = _FakeServerTransport()
+    transport = fake_server_transport
     server = GameServer(transport)
     peer_id = uuid4()
 
@@ -47,10 +28,10 @@ def test_join_with_mismatched_protocol_version_is_rejected():
     assert server._lobby.peer_to_player_id(peer_id) is None
 
 
-def test_join_with_matching_protocol_version_is_accepted():
+def test_join_with_matching_protocol_version_is_accepted(fake_server_transport):
     """A client whose protocol version matches the server's joins the lobby
     and is not disconnected or rejected."""
-    transport = _FakeServerTransport()
+    transport = fake_server_transport
     server = GameServer(transport)
     peer_id = uuid4()
 
@@ -61,7 +42,7 @@ def test_join_with_matching_protocol_version_is_accepted():
     assert not any(isinstance(decode_any(data), RejectMsg) for _peer, data, _ch in transport.sent)
 
 
-def test_rebuild_space_from_state_reuses_space_when_tiles_unchanged():
+def test_rebuild_space_from_state_reuses_space_when_tiles_unchanged(fake_server_transport):
     """Regression: _replay_from (the rollback path, triggered by every
     late/reordered input packet) used to call _rebuild_space_from_state,
     which built a brand-new PhysicsSpace and rebuilt every static wall shape
@@ -69,8 +50,7 @@ def test_rebuild_space_from_state_reuses_space_when_tiles_unchanged():
     that stalled input processing under live load. A rollback replaying
     against an unchanged tile grid must reuse the same space and the same
     wall shape objects rather than rebuilding them."""
-    transport = _FakeServerTransport()
-    server = GameServer(transport)
+    server = GameServer(fake_server_transport)
     tiles = [[TileKind.EMPTY, TileKind.SOLID_WALL], [TileKind.EMPTY, TileKind.EMPTY]]
     state = GameState(tick=0, map_cols=2, map_rows=2, tiles=tiles)
 

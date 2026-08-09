@@ -90,7 +90,6 @@ class GameServer:
         self._input_buffer = InputBuffer()
         self._bus = EventBus()
         self._lobby = LobbyManager(transport, tick_rate)
-        self._peer_to_player: dict[UUID, int] = {}
         self._player_names: dict[int, str] = {}
 
         # Rollback state
@@ -133,6 +132,13 @@ class GameServer:
 
     # ── Poll transport ────────────────────────────────────────────────────────
 
+    def _broadcast_state(self, state_bytes: bytes, tick: int, channel: int) -> None:
+        """Wrap already-encoded state bytes in a StateUpdateMsg and broadcast it."""
+        self._transport.broadcast(
+            StateUpdateMsg(tick=tick, state_bytes=state_bytes).encode(),
+            channel,
+        )
+
     def _poll(self, timeout: float = 0) -> None:
         for event in self._transport.poll(timeout):
             if isinstance(event, ConnectEvent):
@@ -162,7 +168,6 @@ class GameServer:
             self._lobby.on_join(peer_id, msg.player_name)
             pid = self._lobby.peer_to_player_id(peer_id)
             if pid is not None:
-                self._peer_to_player[peer_id] = pid
                 self._player_names[pid] = msg.player_name
             if self._state is not None and self._state.phase == GamePhase.PLAYING:
                 # Game already in progress — send current state so client can spectate
@@ -181,7 +186,7 @@ class GameServer:
 
         elif isinstance(msg, RenameMsg):
             self._lobby.on_rename(peer_id, msg.new_name)
-            pid = self._peer_to_player.get(peer_id)
+            pid = self._lobby.peer_to_player_id(peer_id)
             if pid is not None:
                 stripped = msg.new_name.strip()[:16]
                 if stripped:
@@ -189,7 +194,7 @@ class GameServer:
 
         elif isinstance(msg, InputMsg):
             if self._state and self._state.phase == GamePhase.PLAYING:
-                pid = self._peer_to_player.get(peer_id)
+                pid = self._lobby.peer_to_player_id(peer_id)
                 if pid is None:
                     return
                 inp = PlayerInput(
@@ -208,8 +213,8 @@ class GameServer:
                     self._input_buffer.push(inp)
 
     def _on_disconnect(self, peer_id: UUID) -> None:
+        pid = self._lobby.peer_to_player_id(peer_id)
         self._lobby.on_disconnect(peer_id)
-        pid = self._peer_to_player.pop(peer_id, None)
         if pid is not None and self._state:
             self._state.players.pop(pid, None)
             self._state.player_physics.pop(pid, None)
@@ -274,10 +279,7 @@ class GameServer:
         self._snapshots.pop(evict, None)
         self._input_log.pop(evict, None)
 
-        self._transport.broadcast(
-            StateUpdateMsg(tick=tick, state_bytes=state_bytes).encode(),
-            CHANNEL_UNRELIABLE,
-        )
+        self._broadcast_state(state_bytes, tick, CHANNEL_UNRELIABLE)
 
         if self._profile:
             self._record_profile_sample(tick_start)
@@ -382,13 +384,7 @@ class GameServer:
             self._input_log[t] = inputs
 
         if self._state is not None:
-            self._transport.broadcast(
-                StateUpdateMsg(
-                    tick=current_tick,
-                    state_bytes=self._snapshots[current_tick],
-                ).encode(),
-                CHANNEL_UNRELIABLE,
-            )
+            self._broadcast_state(self._snapshots[current_tick], current_tick, CHANNEL_UNRELIABLE)
 
     def _rebuild_space_from_state(self, state: GameState) -> PhysicsSpace:
         """Repopulate a PhysicsSpace from a GameState snapshot.
@@ -457,10 +453,7 @@ class GameServer:
                 self._state.player_colours[pid] = self._last_player_colours[pid]
         self._state.player_names = dict(self._player_names)
         state_bytes = encode_state(self._state)
-        self._transport.broadcast(
-            StateUpdateMsg(tick=self._state.tick, state_bytes=state_bytes).encode(),
-            CHANNEL_RELIABLE,
-        )
+        self._broadcast_state(state_bytes, self._state.tick, CHANNEL_RELIABLE)
         self._transport.broadcast(
             GameOverMsg(winner_id=winner_id, winner_name=winner_name,
                         draw_names=draw_names).encode(),
@@ -473,7 +466,6 @@ class GameServer:
         self._state = None
         self._space = None
         self._input_buffer = InputBuffer()
-        self._peer_to_player.clear()
         self._player_names.clear()
         self._last_2_spawn_tick = 0
         self._initial_soft_blocks = 0

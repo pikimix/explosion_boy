@@ -1,130 +1,30 @@
 """
 TCP backend for the transport abstraction.
 
-Frame format (per message):
-  [4 bytes] payload length  — big-endian uint32
-  [1 byte]  channel         — CHANNEL_RELIABLE or CHANNEL_UNRELIABLE
-  [N bytes] payload
+Frame format and connection management are shared with the dual TCP+UDP
+backend — see engine/transports/_shared.py.
 
-Each connection gets its own RecvBuffer so a slow peer never stalls others.
+Each connection gets its own recv buffer so a slow peer never stalls others.
 """
 from __future__ import annotations
 
 import select
 import socket
-import struct
-from collections import deque
 from uuid import UUID, uuid4
 
 from engine.transport import (
     CHANNEL_RELIABLE,
     ConnectEvent,
     DisconnectEvent,
-    Frame,
     ReceiveEvent,
     TransportEvent,
 )
-
-_HEADER = struct.Struct("!IB")   # uint32 length + uint8 channel = 5 bytes
-
-
-def _encode(data: bytes, channel: int) -> bytes:
-    return _HEADER.pack(len(data), channel) + data
-
-
-class _RecvBuffer:
-    """Accumulates raw bytes from non-blocking reads; yields complete messages."""
-
-    def __init__(self) -> None:
-        self._buf = bytearray()
-
-    def feed(self, chunk: bytes) -> None:
-        """Append raw bytes received from the socket to the internal buffer.
-
-        Parameters
-        ----------
-        chunk : bytes
-            Raw bytes read from the socket to append to the buffer.
-        """
-        self._buf.extend(chunk)
-
-    def messages(self) -> list[Frame]:
-        """Extract all complete messages currently available in the buffer.
-
-        Returns
-        -------
-        list[Frame]
-            One frame per fully-received message. Consumed bytes are
-            removed from the internal buffer.
-        """
-        out: list[Frame] = []
-        while len(self._buf) >= _HEADER.size:
-            length, channel = _HEADER.unpack_from(self._buf)
-            total = _HEADER.size + length
-            if len(self._buf) < total:
-                break
-            payload = bytes(self._buf[_HEADER.size:total])
-            del self._buf[:total]
-            out.append(Frame(channel, payload))
-        return out
-
-
-class _Peer:
-    def __init__(self, sock: socket.socket, peer_id: UUID) -> None:
-        self.sock = sock
-        self.peer_id = peer_id
-        self.recv_buf = _RecvBuffer()
-        self._send_queue: deque[bytes] = deque()
-
-    def queue_send(self, data: bytes, channel: int) -> None:
-        """Encode a payload and enqueue it for sending on the next flush.
-
-        Parameters
-        ----------
-        data : bytes
-            Payload to send to the peer.
-        channel : int
-            Channel identifier (e.g. ``CHANNEL_RELIABLE``) to tag the frame with.
-        """
-        self._send_queue.append(_encode(data, channel))
-
-    def flush(self) -> bool:
-        """Attempt to drain send queue. Returns False if peer disconnected."""
-        while self._send_queue:
-            frame = self._send_queue[0]
-            try:
-                sent = self.sock.send(frame)
-                if sent == 0:
-                    return False
-                if sent < len(frame):
-                    self._send_queue[0] = frame[sent:]
-                    break
-                self._send_queue.popleft()
-            except (BlockingIOError, InterruptedError):
-                break
-            except OSError:
-                return False
-        return True
-
-    def read(self) -> list[Frame] | None:
-        """Non-blocking read. Returns parsed messages, or None on disconnect."""
-        try:
-            chunk = self.sock.recv(65536)
-        except (BlockingIOError, InterruptedError):
-            return []
-        except OSError:
-            return None
-        if not chunk:
-            return None
-        self.recv_buf.feed(chunk)
-        return self.recv_buf.messages()
-
-    def close(self) -> None:
-        """Close the underlying socket, ignoring any errors."""
-        try:
-            self.sock.close()
-        except OSError:
-            pass
+from engine.transports._shared import (
+    TcpConnection,
+    accept_and_register,
+    encode_frame,
+    poll_connecting,
+)
 
 
 # ── Server ─────────────────────────────────────────────────────────────────────
@@ -135,8 +35,8 @@ class TCPServerTransport:
     def __init__(self, host: str = "0.0.0.0", port: int = 9000,
                  max_clients: int = 16) -> None:
         self._max_clients = max_clients
-        self._peers: dict[UUID, _Peer] = {}
-        self._sock_index: dict[int, _Peer] = {}   # fileno → peer for O(1) lookup
+        self._peers: dict[UUID, TcpConnection] = {}
+        self._sock_index: dict[int, TcpConnection] = {}   # fileno → peer for O(1) lookup
         self._listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._listen.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._listen.setblocking(False)
@@ -205,9 +105,9 @@ class TCPServerTransport:
         channel : int, optional
             Channel identifier to tag the frame with (default ``CHANNEL_RELIABLE``).
         """
-        frame = _encode(data, channel)
+        frame = encode_frame(data, channel)
         for peer in self._peers.values():
-            peer._send_queue.append(frame)
+            peer.queue_encoded(frame)
 
     def disconnect(self, peer_id: UUID) -> None:
         """Forcibly drop a connected peer.
@@ -232,21 +132,11 @@ class TCPServerTransport:
             pass
 
     def _accept(self, events: list[TransportEvent]) -> None:
-        try:
-            conn, _ = self._listen.accept()
-        except OSError:
-            return
-        if len(self._peers) >= self._max_clients:
-            conn.close()
-            return
-        conn.setblocking(False)
-        conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        pid = uuid4()
-        peer = _Peer(conn, pid)
-        self._peers[pid] = peer
-        self._sock_index[conn.fileno()] = peer
-        self._select_list.append(conn)
-        events.append(ConnectEvent(pid))
+        peer = accept_and_register(
+            self._listen, self._peers, self._sock_index, self._select_list, self._max_clients,
+        )
+        if peer is not None:
+            events.append(ConnectEvent(peer.peer_id))
 
     def _recv_from(self, sock: socket.socket,
                    events: list[TransportEvent]) -> None:
@@ -280,7 +170,7 @@ class TCPClientTransport:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.setblocking(False)
         self._sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        self._peer = _Peer(self._sock, uuid4())
+        self._peer = TcpConnection(self._sock, uuid4())
         self._connected = False
         self._connecting = True
         try:
@@ -313,21 +203,11 @@ class TCPClientTransport:
         events: list[TransportEvent] = []
 
         if self._connecting:
-            _, writable, exceptional = select.select(
-                [], [self._sock], [self._sock], timeout
-            )
-            if exceptional:
-                self._connecting = False
-                events.append(DisconnectEvent(self._peer.peer_id))
-                return events
-            if writable:
-                err = self._sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-                self._connecting = False
-                if err != 0:
-                    events.append(DisconnectEvent(self._peer.peer_id))
-                    return events
+            self._connecting, event = poll_connecting(self._sock, self._peer.peer_id, timeout)
+            if isinstance(event, ConnectEvent):
                 self._connected = True
-                events.append(ConnectEvent(self._peer.peer_id))
+            if event is not None:
+                events.append(event)
             return events
 
         if not self._connected:
@@ -390,7 +270,7 @@ class TCPClientTransport:
         sock.setblocking(False)
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self._sock = sock
-        self._peer = _Peer(sock, self._peer.peer_id)
+        self._peer = TcpConnection(sock, self._peer.peer_id)
         try:
             sock.connect((self._host, self._port))
         except BlockingIOError:

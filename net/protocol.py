@@ -15,15 +15,14 @@ from core.state import GameState
 
 PROTOCOL_VERSION: int = 5
 
-# ── Client → Server ────────────────────────────────────────────────────────────
 
-@dataclass
-class JoinMsg:
-    """Client request to join the game with a chosen player name."""
+class _WireMsg:
+    """Mixin providing the common encode() wrapper for wire message dataclasses.
 
-    player_name: str
-    version: int = PROTOCOL_VERSION
-    TYPE: str = "join"
+    Subclasses implement `_to_dict()` with their own field-to-wire-key
+    mapping; `TYPE` is a dataclass field on each subclass.
+    """
+    TYPE: str
 
     def encode(self) -> bytes:
         """Encode this message into its wire byte representation.
@@ -33,8 +32,39 @@ class JoinMsg:
         bytes
             The encoded message ready to be sent over the network.
         """
-        return encode_msg({"type": self.TYPE, "name": self.player_name,
-                           "v": self.version})
+        return encode_msg({"type": self.TYPE, **self._to_dict()})
+
+    def _to_dict(self) -> dict:
+        raise NotImplementedError
+
+
+class _StateBearingMsg:
+    """Mixin for messages carrying pre-encoded GameState bytes."""
+    state_bytes: bytes
+
+    def get_state(self) -> GameState:
+        """Decode the embedded state bytes into a GameState.
+
+        Returns
+        -------
+        GameState
+            The deserialised game state.
+        """
+        return decode_state(self.state_bytes)
+
+
+# ── Client → Server ────────────────────────────────────────────────────────────
+
+@dataclass
+class JoinMsg(_WireMsg):
+    """Client request to join the game with a chosen player name."""
+
+    player_name: str
+    version: int = PROTOCOL_VERSION
+    TYPE: str = "join"
+
+    def _to_dict(self) -> dict:
+        return {"name": self.player_name, "v": self.version}
 
     @staticmethod
     def decode(d: dict) -> "JoinMsg":
@@ -54,39 +84,25 @@ class JoinMsg:
 
 
 @dataclass
-class ReadyMsg:
+class ReadyMsg(_WireMsg):
     """Client notification of the player's ready status in the lobby."""
 
     ready: bool
     TYPE: str = "ready"
 
-    def encode(self) -> bytes:
-        """Encode this message into its wire byte representation.
-
-        Returns
-        -------
-        bytes
-            The encoded message ready to be sent over the network.
-        """
-        return encode_msg({"type": self.TYPE, "ready": self.ready})
+    def _to_dict(self) -> dict:
+        return {"ready": self.ready}
 
 
 @dataclass
-class ColourMsg:
+class ColourMsg(_WireMsg):
     """Client request to set the player's chosen colour."""
 
     colour: Colour
     TYPE: str = 'colour'
 
-    def encode(self) -> bytes:
-        """Encode this message into its wire byte representation.
-
-        Returns
-        -------
-        bytes
-            The encoded message ready to be sent over the network.
-        """
-        return encode_msg({'type': self.TYPE, 'r': self.colour.r, 'g': self.colour.g, 'b': self.colour.b})
+    def _to_dict(self) -> dict:
+        return {'r': self.colour.r, 'g': self.colour.g, 'b': self.colour.b}
 
     @staticmethod
     def decode(d: dict) -> 'ColourMsg':
@@ -106,21 +122,14 @@ class ColourMsg:
 
 
 @dataclass
-class RenameMsg:
+class RenameMsg(_WireMsg):
     """Client request to change the player's name."""
 
     new_name: str
     TYPE: str = 'rename'
 
-    def encode(self) -> bytes:
-        """Encode this message into its wire byte representation.
-
-        Returns
-        -------
-        bytes
-            The encoded message ready to be sent over the network.
-        """
-        return encode_msg({'type': self.TYPE, 'name': self.new_name})
+    def _to_dict(self) -> dict:
+        return {'name': self.new_name}
 
     @staticmethod
     def decode(d: dict) -> 'RenameMsg':
@@ -140,7 +149,7 @@ class RenameMsg:
 
 
 @dataclass
-class InputMsg:
+class InputMsg(_WireMsg):
     """Client per-tick input state, including movement and bomb placement."""
 
     player_id: int
@@ -150,22 +159,14 @@ class InputMsg:
     place_bomb: bool
     TYPE: str = "input"
 
-    def encode(self) -> bytes:
-        """Encode this message into its wire byte representation.
-
-        Returns
-        -------
-        bytes
-            The encoded message ready to be sent over the network.
-        """
-        return encode_msg({
-            "type": self.TYPE,
+    def _to_dict(self) -> dict:
+        return {
             "pid": self.player_id,
             "t": self.tick,
             "mx": self.move_x,
             "my": self.move_y,
             "pb": self.place_bomb,
-        })
+        }
 
     @staticmethod
     def decode(d: dict) -> "InputMsg":
@@ -191,21 +192,14 @@ class InputMsg:
 # ── Server → Client ────────────────────────────────────────────────────────────
 
 @dataclass
-class RejectMsg:
+class RejectMsg(_WireMsg):
     """Server notification that a client request was rejected."""
 
     reason: str
     TYPE: str = "reject"
 
-    def encode(self) -> bytes:
-        """Encode this message into its wire byte representation.
-
-        Returns
-        -------
-        bytes
-            The encoded message ready to be sent over the network.
-        """
-        return encode_msg({"type": self.TYPE, "reason": self.reason})
+    def _to_dict(self) -> dict:
+        return {"reason": self.reason}
 
     @staticmethod
     def decode(d: dict) -> "RejectMsg":
@@ -225,23 +219,15 @@ class RejectMsg:
 
 
 @dataclass
-class WelcomeMsg:
+class WelcomeMsg(_WireMsg):
     """Server acknowledgement assigning a player id and tick rate to a client."""
 
     assigned_player_id: int
     tick_rate: int = 60
     TYPE: str = "welcome"
 
-    def encode(self) -> bytes:
-        """Encode this message into its wire byte representation.
-
-        Returns
-        -------
-        bytes
-            The encoded message ready to be sent over the network.
-        """
-        return encode_msg({"type": self.TYPE, "pid": self.assigned_player_id,
-                           "tr": self.tick_rate})
+    def _to_dict(self) -> dict:
+        return {"pid": self.assigned_player_id, "tr": self.tick_rate}
 
     @staticmethod
     def decode(d: dict) -> "WelcomeMsg":
@@ -261,23 +247,15 @@ class WelcomeMsg:
 
 
 @dataclass
-class LobbyUpdateMsg:
+class LobbyUpdateMsg(_WireMsg):
     """Server broadcast of the current lobby roster and ready states."""
 
     players: list[dict]   # [{"id": int, "name": str, "ready": bool}]
     countdown: int | None = None  # whole seconds left before game start, or None
     TYPE: str = "lobby_update"
 
-    def encode(self) -> bytes:
-        """Encode this message into its wire byte representation.
-
-        Returns
-        -------
-        bytes
-            The encoded message ready to be sent over the network.
-        """
-        return encode_msg({"type": self.TYPE, "players": self.players,
-                           "countdown": self.countdown})
+    def _to_dict(self) -> dict:
+        return {"players": self.players, "countdown": self.countdown}
 
     @staticmethod
     def decode(d: dict) -> "LobbyUpdateMsg":
@@ -297,21 +275,14 @@ class LobbyUpdateMsg:
 
 
 @dataclass
-class GameStartMsg:
+class GameStartMsg(_WireMsg, _StateBearingMsg):
     """Server notification that the game has begun, carrying the initial state."""
 
     state_bytes: bytes
     TYPE: str = "game_start"
 
-    def encode(self) -> bytes:
-        """Encode this message into its wire byte representation.
-
-        Returns
-        -------
-        bytes
-            The encoded message ready to be sent over the network.
-        """
-        return encode_msg({"type": self.TYPE, "state": self.state_bytes})
+    def _to_dict(self) -> dict:
+        return {"state": self.state_bytes}
 
     @staticmethod
     def decode(d: dict) -> "GameStartMsg":
@@ -329,35 +300,17 @@ class GameStartMsg:
         """
         return GameStartMsg(state_bytes=bytes(d["state"]))
 
-    def get_state(self) -> GameState:
-        """Decode the embedded state bytes into a GameState.
-
-        Returns
-        -------
-        GameState
-            The deserialised game state.
-        """
-        return decode_state(self.state_bytes)
-
 
 @dataclass
-class StateUpdateMsg:
+class StateUpdateMsg(_WireMsg, _StateBearingMsg):
     """Server per-tick broadcast of the authoritative game state."""
 
     tick: int
     state_bytes: bytes
     TYPE: str = "state_update"
 
-    def encode(self) -> bytes:
-        """Encode this message into its wire byte representation.
-
-        Returns
-        -------
-        bytes
-            The encoded message ready to be sent over the network.
-        """
-        return encode_msg({"type": self.TYPE, "t": self.tick,
-                           "state": self.state_bytes})
+    def _to_dict(self) -> dict:
+        return {"t": self.tick, "state": self.state_bytes}
 
     @staticmethod
     def decode(d: dict) -> "StateUpdateMsg":
@@ -375,19 +328,9 @@ class StateUpdateMsg:
         """
         return StateUpdateMsg(tick=d["t"], state_bytes=bytes(d["state"]))
 
-    def get_state(self) -> GameState:
-        """Decode the embedded state bytes into a GameState.
-
-        Returns
-        -------
-        GameState
-            The deserialised game state.
-        """
-        return decode_state(self.state_bytes)
-
 
 @dataclass
-class GameOverMsg:
+class GameOverMsg(_WireMsg):
     """Server notification that the game has ended, with the winner or drawers."""
 
     winner_id: int | None
@@ -395,16 +338,8 @@ class GameOverMsg:
     draw_names: list[str] = field(default_factory=list)
     TYPE: str = "game_over"
 
-    def encode(self) -> bytes:
-        """Encode this message into its wire byte representation.
-
-        Returns
-        -------
-        bytes
-            The encoded message ready to be sent over the network.
-        """
-        return encode_msg({"type": self.TYPE, "wid": self.winner_id,
-                           "wname": self.winner_name, "dnames": self.draw_names})
+    def _to_dict(self) -> dict:
+        return {"wid": self.winner_id, "wname": self.winner_name, "dnames": self.draw_names}
 
     @staticmethod
     def decode(d: dict) -> "GameOverMsg":

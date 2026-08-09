@@ -8,30 +8,15 @@ from net.lobby import LobbyManager, READY_COUNTDOWN_SECONDS
 from systems.world import map_size_for_player_count, spawn_points_for_grid
 
 
-class _FakeTransport:
-    def poll(self, timeout: float = 0):
-        """Return no pending events, satisfying the transport polling interface."""
-        return []
-
-    def send(self, peer_id, data, channel):
-        """No-op stub for sending data to a single peer."""
-
-    def broadcast(self, data, channel):
-        """No-op stub for broadcasting data to all peers."""
-
-    def disconnect(self, peer_id):
-        """No-op stub for disconnecting a peer."""
-
-
 def _join_n_players(lobby: LobbyManager, n: int) -> None:
     for i in range(n):
         lobby.on_join(uuid4(), f"player{i}")
 
 
-def test_build_initial_state_sizes_grid_by_player_count():
+def test_build_initial_state_sizes_grid_by_player_count(fake_server_transport):
     """Verify the map grid is sized according to the number of joined players."""
     for n, expected in ((2, (MIN_GRID_SIZE, MIN_GRID_SIZE)), (16, (MAX_GRID_SIZE, MAX_GRID_SIZE))):
-        lobby = LobbyManager(_FakeTransport())
+        lobby = LobbyManager(fake_server_transport)
         _join_n_players(lobby, n)
         state = lobby.build_initial_state(seed=1)
         assert (state.map_cols, state.map_rows) == expected == map_size_for_player_count(n)
@@ -40,9 +25,9 @@ def test_build_initial_state_sizes_grid_by_player_count():
         assert len(state.player_physics) == n
 
 
-def test_build_initial_state_places_every_player_in_bounds():
+def test_build_initial_state_places_every_player_in_bounds(fake_server_transport):
     """Verify every player's spawn position lies within the map bounds."""
-    lobby = LobbyManager(_FakeTransport())
+    lobby = LobbyManager(fake_server_transport)
     _join_n_players(lobby, 5)
     state = lobby.build_initial_state(seed=2)
     for phys in state.player_physics.values():
@@ -50,11 +35,11 @@ def test_build_initial_state_places_every_player_in_bounds():
         assert 0 <= phys.y <= state.map_rows * TILE_SIZE
 
 
-def test_build_initial_state_protects_spawns_with_non_contiguous_player_ids():
+def test_build_initial_state_protects_spawns_with_non_contiguous_player_ids(fake_server_transport):
     """A player who leaves the lobby frees their id, but a later joiner takes
     the smallest *unused* id — so the round can start with ids like {0, 2, 3}
     for 3 players. The safety zone must follow the real id, not spawn_points[:n]."""
-    lobby = LobbyManager(_FakeTransport())
+    lobby = LobbyManager(fake_server_transport)
     peers = [uuid4() for _ in range(4)]
     for i, peer in enumerate(peers):
         lobby.on_join(peer, f"player{i}")
@@ -76,10 +61,10 @@ def test_build_initial_state_protects_spawns_with_non_contiguous_player_ids():
                 assert state.tiles[r][c] != TileKind.SOFT_BLOCK
 
 
-def test_countdown_starts_once_everyone_ready_and_cancels_on_unready():
+def test_countdown_starts_once_everyone_ready_and_cancels_on_unready(fake_server_transport):
     """The 5s ready countdown only starts once every player is ready, and
     cancels immediately if anyone un-readies."""
-    lobby = LobbyManager(_FakeTransport())
+    lobby = LobbyManager(fake_server_transport)
     p1, p2 = uuid4(), uuid4()
     lobby.on_join(p1, "a")
     lobby.on_join(p2, "b")
@@ -94,9 +79,9 @@ def test_countdown_starts_once_everyone_ready_and_cancels_on_unready():
     assert lobby.countdown_seconds() is None
 
 
-def test_countdown_tick_signals_game_start_after_delay():
+def test_countdown_tick_signals_game_start_after_delay(fake_server_transport):
     """Ticking the countdown for its full duration reports the game should start."""
-    lobby = LobbyManager(_FakeTransport())
+    lobby = LobbyManager(fake_server_transport)
     p1, p2 = uuid4(), uuid4()
     lobby.on_join(p1, "a")
     lobby.on_join(p2, "b")

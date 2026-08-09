@@ -18,13 +18,16 @@ UDP datagram format:
   [16 bytes] peer UUID  (big-endian bytes)
   [1 byte]   channel    (CHANNEL_UNRELIABLE)
   [N bytes]  payload
+
+TCP framing and connection management (recv buffering, send queue, the
+connect handshake, and accept/register bookkeeping) are shared with the
+plain-TCP backend — see engine/transports/_shared.py.
 """
 from __future__ import annotations
 
 import select
 import socket
 import struct
-from collections import deque
 from uuid import UUID, uuid4
 
 from engine.transport import (
@@ -32,113 +35,30 @@ from engine.transport import (
     CHANNEL_UNRELIABLE,
     ConnectEvent,
     DisconnectEvent,
-    Frame,
     ReceiveEvent,
     TransportEvent,
 )
+from engine.transports._shared import (
+    TcpConnection,
+    accept_and_register,
+    encode_frame,
+    poll_connecting,
+)
 
-_TCP_HEADER = struct.Struct('!IB')    # uint32 length + uint8 channel = 5 bytes
 _UDP_HEADER = struct.Struct('!16sB')  # 16-byte UUID + uint8 channel = 17 bytes
 _CHANNEL_UDP_TOKEN = 0xFF             # internal: server delivers UUID to client over TCP
-
-
-def _tcp_encode(data: bytes, channel: int) -> bytes:
-    return _TCP_HEADER.pack(len(data), channel) + data
 
 
 def _udp_encode(peer_id: UUID, data: bytes) -> bytes:
     return _UDP_HEADER.pack(peer_id.bytes, CHANNEL_UNRELIABLE) + data
 
 
-class _RecvBuffer:
-    """Accumulates raw TCP bytes; yields complete framed messages."""
+class _TcpPeer(TcpConnection):
+    """A server-side TCP peer connection, plus its registered UDP endpoint."""
 
-    def __init__(self) -> None:
-        self._buf = bytearray()
-
-    def feed(self, chunk: bytes) -> None:
-        """Append a raw chunk of bytes received from the socket to the buffer."""
-        self._buf.extend(chunk)
-
-    def messages(self) -> list[Frame]:
-        """Extract and return all complete framed messages currently buffered.
-
-        Returns
-        -------
-        list[Frame]
-            One frame per complete message found in the buffer, in arrival
-            order. Any trailing partial frame is left in the buffer for the
-            next call.
-        """
-        out: list[Frame] = []
-        while len(self._buf) >= _TCP_HEADER.size:
-            length, channel = _TCP_HEADER.unpack_from(self._buf)
-            total = _TCP_HEADER.size + length
-            if len(self._buf) < total:
-                break
-            payload = bytes(self._buf[_TCP_HEADER.size:total])
-            del self._buf[:total]
-            out.append(Frame(channel, payload))
-        return out
-
-
-class _TcpPeer:
     def __init__(self, sock: socket.socket, peer_id: UUID) -> None:
-        self.sock = sock
-        self.peer_id = peer_id
-        self.recv_buf = _RecvBuffer()
-        self._send_queue: deque[bytes] = deque()
+        super().__init__(sock, peer_id)
         self.udp_addr: tuple[str, int] | None = None
-
-    def queue_send(self, data: bytes, channel: int) -> None:
-        """Encode a payload as a TCP frame and enqueue it for sending.
-
-        Parameters
-        ----------
-        data : bytes
-            Payload to send.
-        channel : int
-            Logical channel (e.g. ``CHANNEL_RELIABLE``) to tag the frame with.
-        """
-        self._send_queue.append(_tcp_encode(data, channel))
-
-    def flush(self) -> bool:
-        """Drain the TCP send queue. Returns False if the peer has disconnected."""
-        while self._send_queue:
-            frame = self._send_queue[0]
-            try:
-                sent = self.sock.send(frame)
-                if sent == 0:
-                    return False
-                if sent < len(frame):
-                    self._send_queue[0] = frame[sent:]
-                    break
-                self._send_queue.popleft()
-            except (BlockingIOError, InterruptedError):
-                break
-            except OSError:
-                return False
-        return True
-
-    def read(self) -> list[Frame] | None:
-        """Non-blocking TCP read. Returns parsed messages, or None on disconnect."""
-        try:
-            chunk = self.sock.recv(65536)
-        except (BlockingIOError, InterruptedError):
-            return []
-        except OSError:
-            return None
-        if not chunk:
-            return None
-        self.recv_buf.feed(chunk)
-        return self.recv_buf.messages()
-
-    def close(self) -> None:
-        """Close the underlying TCP socket, ignoring any error."""
-        try:
-            self.sock.close()
-        except OSError:
-            pass
 
 
 # ── Server ─────────────────────────────────────────────────────────────────────
@@ -249,6 +169,7 @@ class DualServerTransport:
             routes over UDP for peers with a registered UDP endpoint,
             otherwise falls back to TCP (default ``CHANNEL_RELIABLE``).
         """
+        frame = encode_frame(data, channel)
         for peer_id, peer in self._peers.items():
             if channel == CHANNEL_UNRELIABLE and peer.udp_addr is not None:
                 try:
@@ -256,7 +177,7 @@ class DualServerTransport:
                 except OSError:
                     pass
             else:
-                peer._send_queue.append(_tcp_encode(data, channel))
+                peer.queue_encoded(frame)
 
     def disconnect(self, peer_id: UUID) -> None:
         """Forcibly drop a connected peer.
@@ -286,22 +207,13 @@ class DualServerTransport:
             pass
 
     def _accept(self, events: list[TransportEvent]) -> None:
-        try:
-            conn, _ = self._tcp_listen.accept()
-        except OSError:
-            return
-        if len(self._peers) >= self._max_clients:
-            conn.close()
-            return
-        conn.setblocking(False)
-        conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        pid = uuid4()
-        peer = _TcpPeer(conn, pid)
-        self._peers[pid] = peer
-        self._sock_index[conn.fileno()] = peer
-        self._select_list.append(conn)
-        peer.queue_send(pid.bytes, _CHANNEL_UDP_TOKEN)
-        events.append(ConnectEvent(pid))
+        peer = accept_and_register(
+            self._tcp_listen, self._peers, self._sock_index, self._select_list,
+            self._max_clients, peer_factory=_TcpPeer,
+        )
+        if peer is not None:
+            peer.queue_send(peer.peer_id.bytes, _CHANNEL_UDP_TOKEN)
+            events.append(ConnectEvent(peer.peer_id))
 
     def _recv_tcp(self, sock: socket.socket,
                   events: list[TransportEvent]) -> None:
@@ -373,17 +285,16 @@ class DualClientTransport:
         self._connected = False
         self._connecting = True
 
-        self._tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._tcp_sock.setblocking(False)
-        self._tcp_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        self._tcp_recv_buf = _RecvBuffer()
-        self._tcp_send_queue: deque[bytes] = deque()
+        tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        tcp_sock.setblocking(False)
+        tcp_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self._tcp = TcpConnection(tcp_sock, self._local_id)
 
         self._udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._udp_sock.setblocking(False)
 
         try:
-            self._tcp_sock.connect((host, port))
+            tcp_sock.connect((host, port))
         except BlockingIOError:
             pass
 
@@ -413,38 +324,25 @@ class DualClientTransport:
         events: list[TransportEvent] = []
 
         if self._connecting:
-            try:
-                _, writable, exceptional = select.select(
-                    [], [self._tcp_sock], [self._tcp_sock], timeout
-                )
-            except OSError:
-                self._connecting = False
-                events.append(DisconnectEvent(self._local_id))
-                return events
-            if exceptional:
-                self._connecting = False
-                events.append(DisconnectEvent(self._local_id))
-                return events
-            if writable:
-                err = self._tcp_sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-                self._connecting = False
-                if err != 0:
-                    events.append(DisconnectEvent(self._local_id))
-                    return events
+            self._connecting, event = poll_connecting(
+                self._tcp.sock, self._local_id, timeout, guard_select_oserror=True,
+            )
+            if isinstance(event, ConnectEvent):
                 self._connected = True
-                events.append(ConnectEvent(self._local_id))
+            if event is not None:
+                events.append(event)
             return events
 
         if not self._connected:
             return events
 
         # Flush outbound data before blocking so inputs sent last iteration go out now
-        if not self._flush_tcp():
+        if not self._tcp.flush():
             self._connected = False
             events.append(DisconnectEvent(self._local_id))
             return events
 
-        read_socks = [self._tcp_sock]
+        read_socks = [self._tcp.sock]
         if self._peer_uuid is not None:
             read_socks.append(self._udp_sock)
         try:
@@ -455,12 +353,12 @@ class DualClientTransport:
             return events
 
         for sock in readable:
-            if sock is self._tcp_sock:
+            if sock is self._tcp.sock:
                 self._recv_tcp(events)
             else:
                 self._recv_udp(events)
 
-        if not self._flush_tcp():
+        if not self._tcp.flush():
             self._connected = False
             events.append(DisconnectEvent(self._local_id))
 
@@ -488,16 +386,13 @@ class DualClientTransport:
             except OSError:
                 pass
         else:
-            self._tcp_send_queue.append(_tcp_encode(data, channel))
+            self._tcp.queue_send(data, channel)
 
     def disconnect(self) -> None:
         """Close the TCP and UDP sockets and mark the client as disconnected."""
         self._connected = False
         self._connecting = False
-        try:
-            self._tcp_sock.close()
-        except OSError:
-            pass
+        self._tcp.close()
         try:
             self._udp_sock.close()
         except OSError:
@@ -505,10 +400,7 @@ class DualClientTransport:
 
     def reconnect(self) -> None:
         """Close existing sockets and start a fresh connection attempt to the same host/port."""
-        try:
-            self._tcp_sock.close()
-        except OSError:
-            pass
+        self._tcp.close()
         try:
             self._udp_sock.close()
         except OSError:
@@ -516,33 +408,24 @@ class DualClientTransport:
         self._peer_uuid = None
         self._connected = False
         self._connecting = True
-        self._tcp_recv_buf = _RecvBuffer()
-        self._tcp_send_queue.clear()
-        self._tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._tcp_sock.setblocking(False)
-        self._tcp_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setblocking(False)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self._tcp = TcpConnection(sock, self._local_id)
         self._udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._udp_sock.setblocking(False)
         try:
-            self._tcp_sock.connect((self._host, self._port))
+            sock.connect((self._host, self._port))
         except BlockingIOError:
             pass
 
     def _recv_tcp(self, events: list[TransportEvent]) -> None:
-        try:
-            chunk = self._tcp_sock.recv(65536)
-        except (BlockingIOError, InterruptedError):
-            return
-        except OSError:
+        messages = self._tcp.read()
+        if messages is None:
             self._connected = False
             events.append(DisconnectEvent(self._local_id))
             return
-        if not chunk:
-            self._connected = False
-            events.append(DisconnectEvent(self._local_id))
-            return
-        self._tcp_recv_buf.feed(chunk)
-        for frame in self._tcp_recv_buf.messages():
+        for frame in messages:
             if frame.channel == _CHANNEL_UDP_TOKEN and len(frame.payload) == 16:
                 # Server assigned our UUID — register UDP endpoint with server
                 self._peer_uuid = UUID(bytes=frame.payload)
@@ -563,20 +446,3 @@ class DualClientTransport:
         _, channel = _UDP_HEADER.unpack_from(data)
         payload = data[_UDP_HEADER.size:]
         events.append(ReceiveEvent(self._local_id, channel, payload))
-
-    def _flush_tcp(self) -> bool:
-        while self._tcp_send_queue:
-            frame = self._tcp_send_queue[0]
-            try:
-                sent = self._tcp_sock.send(frame)
-                if sent == 0:
-                    return False
-                if sent < len(frame):
-                    self._tcp_send_queue[0] = frame[sent:]
-                    break
-                self._tcp_send_queue.popleft()
-            except (BlockingIOError, InterruptedError):
-                break
-            except OSError:
-                return False
-        return True
