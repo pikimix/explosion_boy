@@ -315,7 +315,8 @@ class GameView:
         else:
             phys = state.player_physics.get(local_id) if local_id is not None else None
             px, py = (phys.x, phys.y) if phys is not None else (-1.0e6, -1.0e6)
-        self._smoke.draw(state, local_id, px, py)
+        self._smoke.update(state, local_id, px, py)
+        self._smoke.draw()
 
     def _draw_explosions(self, state: GameState) -> None:
         for exp in state.explosions:
