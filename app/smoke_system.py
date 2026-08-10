@@ -12,6 +12,7 @@ game is unaffected.
 from __future__ import annotations
 
 import logging
+import time as time_module
 from pathlib import Path
 
 import arcade
@@ -37,6 +38,7 @@ def disable() -> None:
 
 _HOLE_RADIUS = TILE_SIZE       # 1 grid cell around the local player
 _EDGE_SOFTNESS = 0.12          # fraction of the box half-extent softened at the boundary
+_MAX_FLOW_SOURCES = 8          # cap on other players whose motion can disturb the smoke texture
 
 
 class SmokeCloudSystem:
@@ -47,9 +49,22 @@ class SmokeCloudSystem:
         self._quad = None
         # None = not yet attempted; True = ready; False = permanently disabled
         self._enabled: bool | None = None
+        self._start_time = time_module.monotonic()
 
-    def draw(self, state: GameState, player_x: float, player_y: float) -> None:
-        """Draw every active smoke cloud, cutting a hole around (player_x, player_y)."""
+    def draw(
+        self,
+        state: GameState,
+        local_id: int | None,
+        player_x: float,
+        player_y: float,
+    ) -> None:
+        """Draw every active smoke cloud, cutting a plain circular hole around
+        (player_x, player_y) — the local player's own reveal.
+
+        Every other player tracked in state.player_physics disturbs the
+        smoke's noise texture with their velocity as they walk through it
+        (see smoke.frag), giving a visual tell without revealing them.
+        """
         if not state.smoke_clouds:
             return
         if self._enabled is None:
@@ -65,6 +80,24 @@ class SmokeCloudSystem:
         self._program['player_pos'] = (player_x, player_y)
         self._program['hole_radius'] = _HOLE_RADIUS
         self._program['edge_softness'] = _EDGE_SOFTNESS
+        self._program['time'] = time_module.monotonic() - self._start_time
+
+        flow_pos = [0.0] * (_MAX_FLOW_SOURCES * 2)
+        flow_vel = [0.0] * (_MAX_FLOW_SOURCES * 2)
+        flow_count = 0
+        for pid, phys in state.player_physics.items():
+            if flow_count >= _MAX_FLOW_SOURCES:
+                break
+            if pid == local_id:
+                continue
+            flow_pos[flow_count * 2] = phys.x
+            flow_pos[flow_count * 2 + 1] = phys.y
+            flow_vel[flow_count * 2] = phys.vx
+            flow_vel[flow_count * 2 + 1] = phys.vy
+            flow_count += 1
+        self._program['flow_pos'] = tuple(flow_pos)
+        self._program['flow_vel'] = tuple(flow_vel)
+        self._program['flow_count'] = flow_count
 
         for cloud in state.smoke_clouds:
             cx = cloud.col * TILE_SIZE + TILE_SIZE / 2
