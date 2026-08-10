@@ -11,7 +11,7 @@ import arcade.shape_list
 from PIL import Image
 
 from app.sound_system import SoundSystem
-from app.ui.geometry import Bounds
+from app.ui.geometry import Bounds, make_playfield_camera, unit_value_from_x
 from app.ui.hud import HUD_WIDTH
 from core.components import Cell, Colour
 from net.client import GameClient
@@ -300,7 +300,7 @@ class LobbyScene:
         # Slider → update brightness
         slider = self._slider_bounds(win)
         if slider.left <= x <= slider.right and slider.bottom <= y <= slider.top:
-            self._value = max(0.0, min(1.0, (x - slider.left) / (slider.right - slider.left)))
+            self._value = unit_value_from_x(x, slider.left, slider.right - slider.left)
             self._update_colour_from_hsv()
             self._client.send_colour(self._colour)
             user_prefs.set_pref('colour_rgb', list(self._colour.as_tuple()))
@@ -311,12 +311,7 @@ class LobbyScene:
     # ── Camera ────────────────────────────────────────────────────────────────
 
     def _make_camera(self, width: float, height: float) -> arcade.camera.Camera2D:
-        play_w = width - HUD_WIDTH
-        return arcade.camera.Camera2D(
-            viewport=arcade.LBWH(HUD_WIDTH, 0, play_w, height),
-            position=(self._map_w / 2, self._map_h / 2),
-            zoom=min(play_w / self._map_w, height / self._map_h),
-        )
+        return make_playfield_camera(width, height, self._map_w, self._map_h)
 
     # ── Map preview ───────────────────────────────────────────────────────────
 

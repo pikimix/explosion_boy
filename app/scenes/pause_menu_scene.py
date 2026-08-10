@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import arcade
 
-from app.ui.geometry import Bounds
+from app.ui.geometry import Bounds, unit_value_from_x
 from engine import user_prefs
 
 _OVERLAY_COLOUR = (0, 0, 0, 160)
@@ -88,7 +88,7 @@ class PauseMenuScene:
         return Bounds(cx - _BTN_W / 2, cx + _BTN_W / 2, pb + 28, pb + 28 + _BTN_H)
 
     def _value_from_x(self, x: float, sl: float) -> float:
-        return max(0.0, min(1.0, (x - sl) / _SLIDER_W))
+        return unit_value_from_x(x, sl, _SLIDER_W)
 
     # ── Text initialisation ───────────────────────────────────────────────────
 

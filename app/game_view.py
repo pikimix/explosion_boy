@@ -19,7 +19,7 @@ from app.particle_system import ExplosionParticleSystem
 from app.shockwave_system import ShockwaveSystem
 from app.smoke_system import SmokeCloudSystem
 from app.ui import hud, speed_widget
-from app.ui.hud import HUD_WIDTH
+from app.ui.geometry import make_playfield_camera
 from core.components import PowerupKind, TileKind
 from core.state import GameState
 from engine.config import (
@@ -112,12 +112,7 @@ class GameView:
         )
 
     def _make_camera(self, width: float, height: float) -> arcade.camera.Camera2D:
-        play_w = width - HUD_WIDTH
-        return arcade.camera.Camera2D(
-            viewport=arcade.LBWH(HUD_WIDTH, 0, play_w, height),
-            position=(self._map_w / 2, self._map_h / 2),
-            zoom=min(play_w / self._map_w, height / self._map_h),
-        )
+        return make_playfield_camera(width, height, self._map_w, self._map_h)
 
     def on_resize(self, width: int, height: int) -> None:
         """Rebuild the camera to match the new window dimensions.
