@@ -66,6 +66,13 @@ _ORBIT_SPEED_MIN, _ORBIT_SPEED_MAX = 0.5, 2.0    # rad/s
 _WIND_AMP_MIN, _WIND_AMP_MAX = 8.0, 22.0
 _WIND_FREQ_MIN, _WIND_FREQ_MAX = 0.15, 0.5       # rad/s, slow ambient wander
 
+# Exponential smoothing rate (1/s) for player positions/velocities fed to
+# the shader — state.player_physics only changes at server-tick rate, so
+# this fills the gaps between ticks with continuous motion instead of the
+# raw dict's discrete jumps. Higher = snappier but jumpier, lower = smoother
+# but laggier.
+_PLAYER_SMOOTH_RATE = 12.0
+
 _HOLD_OPACITY = 0.99
 
 
@@ -131,11 +138,17 @@ class SmokeCloudSystem:
         self._other_pos: tuple[float, ...] = tuple([0.0] * (_MAX_PLAYERS * 2))
         self._other_vel: tuple[float, ...] = tuple([0.0] * (_MAX_PLAYERS * 2))
         self._other_count = 0
+        # Smoothed towards state.player_physics each frame — that dict only
+        # changes at server-tick rate, so feeding it to the shader straight
+        # makes wind-pushed particles visibly snap between ticks instead of
+        # flowing continuously.
+        self._smoothed_players: dict[int, list[float]] = {}
 
     # ── Public interface ────────────────────────────────────────────────────
 
     def update(
         self,
+        dt: float,
         state: GameState,
         local_id: int | None,
         player_x: float,
@@ -183,17 +196,33 @@ class SmokeCloudSystem:
             )
         self._cloud_fade = tuple(fade_array)
 
+        lerp_t = min(1.0, dt * _PLAYER_SMOOTH_RATE) if dt > 0.0 else 1.0
+        seen_pids: set[int] = set()
         other_pos = [0.0] * (_MAX_PLAYERS * 2)
         other_vel = [0.0] * (_MAX_PLAYERS * 2)
         count = 0
-        for phys in state.player_physics.values():
+        for pid, phys in state.player_physics.items():
+            seen_pids.add(pid)
+            smoothed = self._smoothed_players.get(pid)
+            if smoothed is None:
+                smoothed = [phys.x, phys.y, phys.vx, phys.vy]
+                self._smoothed_players[pid] = smoothed
+            else:
+                smoothed[0] += (phys.x - smoothed[0]) * lerp_t
+                smoothed[1] += (phys.y - smoothed[1]) * lerp_t
+                smoothed[2] += (phys.vx - smoothed[2]) * lerp_t
+                smoothed[3] += (phys.vy - smoothed[3]) * lerp_t
+
             if count >= _MAX_PLAYERS:
-                break
-            other_pos[count * 2] = phys.x
-            other_pos[count * 2 + 1] = phys.y
-            other_vel[count * 2] = phys.vx
-            other_vel[count * 2 + 1] = phys.vy
+                continue
+            other_pos[count * 2], other_pos[count * 2 + 1] = smoothed[0], smoothed[1]
+            other_vel[count * 2], other_vel[count * 2 + 1] = smoothed[2], smoothed[3]
             count += 1
+
+        for pid in list(self._smoothed_players):
+            if pid not in seen_pids:
+                del self._smoothed_players[pid]
+
         self._other_pos = tuple(other_pos)
         self._other_vel = tuple(other_vel)
         self._other_count = count

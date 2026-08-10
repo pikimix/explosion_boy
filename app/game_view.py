@@ -198,7 +198,7 @@ class GameView:
         self._draw_powerups(state)
         self._draw_bombs(state)
         self._draw_players(state, local_player_id, predicted_x, predicted_y, predicted_vx, predicted_vy)
-        self._draw_smoke(state, local_player_id, predicted_x, predicted_y)
+        self._draw_smoke(state, dt, local_player_id, predicted_x, predicted_y)
         self._draw_explosions(state)
         self._particles.update(dt, state)
         self._particles.draw()
@@ -306,6 +306,7 @@ class GameView:
     def _draw_smoke(
         self,
         state: GameState,
+        dt: float,
         local_id: int | None,
         pred_x: float | None,
         pred_y: float | None,
@@ -315,7 +316,7 @@ class GameView:
         else:
             phys = state.player_physics.get(local_id) if local_id is not None else None
             px, py = (phys.x, phys.y) if phys is not None else (-1.0e6, -1.0e6)
-        self._smoke.update(state, local_id, px, py)
+        self._smoke.update(dt, state, local_id, px, py)
         self._smoke.draw()
 
     def _draw_explosions(self, state: GameState) -> None:
