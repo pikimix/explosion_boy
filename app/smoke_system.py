@@ -8,9 +8,22 @@ handful of small uniforms (elapsed time, every player's current
 position/velocity, and each cloud's hold/fade value); the vertex shader
 (smoke_particles.vert) does the entire simulation: orbiting, the wind
 "push" from nearby players, per-particle turnover fade, and the local
-player's hole cutout. If the driver does not support GLSL 3.30
-(OpenGL 3.3) the system disables itself silently so the rest of the game
-is unaffected.
+player's hole cutout.
+
+Rendering is two-pass, metaball-style, so the cloud reads as one joined,
+rim-shaded shape rather than hundreds of individually-lit balls:
+
+1. Density pass — every particle is rasterised as a soft circle into an
+   offscreen buffer with additive blending (smoke_density.frag), so
+   overlapping particles' discs sum into a single continuous field.
+2. Composite pass — one full-screen shader (smoke_composite.frag)
+   thresholds that field into the blob's silhouette and takes its
+   gradient to find the true edge of the *joined* shape (near-zero deep
+   inside an overlapping mass, large right at the boundary), driving the
+   cel-shaded banding/outline only there.
+
+If the driver does not support GLSL 3.30 (OpenGL 3.3) the system disables
+itself silently so the rest of the game is unaffected.
 """
 from __future__ import annotations
 
@@ -22,7 +35,8 @@ import time as time_module
 from pathlib import Path
 
 import arcade
-from arcade.gl import BufferDescription
+from arcade.gl import BufferDescription, Framebuffer
+from arcade.gl.geometry import quad_2d_fs
 
 from app.gfx_base import try_init_shader_effect
 from core.state import GameState
@@ -53,8 +67,8 @@ _MAX_PARTICLES = 1_000_000
 _FLOATS_PER_PARTICLE = 11          # in_spawn(2), kind, amp, freq, phase, phase2, size, life_total, life_phase, slot
 _BYTES_PER_PARTICLE = _FLOATS_PER_PARTICLE * 4
 
-_DENSITY_PER_TILE = 260         # particles per grid cell of a cloud's area
-_MAX_PARTICLES_PER_CLOUD = 48_000
+_DENSITY_PER_TILE = 64         # particles per grid cell of a cloud's area
+_MAX_PARTICLES_PER_CLOUD = 48000
 _ORBIT_FRACTION = 0.55
 
 _SIZE_MIN, _SIZE_MAX = 11.0, 20.0
@@ -128,11 +142,16 @@ class SmokeCloudSystem:
         self._dirty = False
         self._start_time = time_module.monotonic()
 
-        self._program = None
+        self._density_program = None
+        self._composite_program = None
+        self._composite_quad = None
         self._vbo = None
         self._geometry = None
         self._enabled: bool | None = None
         self._render_count = 0
+
+        self._density_fbo: Framebuffer | None = None
+        self._fbo_size: tuple[int, int] = (0, 0)
 
         self._local_player_pos = (-1.0e6, -1.0e6)
         self._other_pos: tuple[float, ...] = tuple([0.0] * (_MAX_PLAYERS * 2))
@@ -229,7 +248,7 @@ class SmokeCloudSystem:
         self._local_player_pos = (player_x, player_y)
 
     def draw(self) -> None:
-        """Upload the particle buffer (only if clouds spawned/despawned) and render."""
+        """Render every cloud in two passes: density-field, then cel-shaded composite."""
         if self._enabled is None:
             self._enabled = self._try_init()
         if not self._enabled or not self._blocks:
@@ -254,24 +273,55 @@ class SmokeCloudSystem:
         if self._render_count == 0:
             return
 
-        elapsed = time_module.monotonic() - self._start_time
-        self._program['time'] = elapsed
-        self._program['player_pos'] = self._local_player_pos
-        self._program['hole_radius'] = _HOLE_RADIUS
-        self._program['other_pos'] = self._other_pos
-        self._program['other_vel'] = self._other_vel
-        self._program['other_count'] = self._other_count
-        self._program['cloud_fade'] = self._cloud_fade
+        win = arcade.get_window()
+        ctx = win.ctx
+        width, height = win.width, win.height
+        fbo = self._ensure_density_fbo(width, height)
 
-        ctx = arcade.get_window().ctx
+        elapsed = time_module.monotonic() - self._start_time
+        self._density_program['time'] = elapsed
+        self._density_program['player_pos'] = self._local_player_pos
+        self._density_program['hole_radius'] = _HOLE_RADIUS
+        self._density_program['other_pos'] = self._other_pos
+        self._density_program['other_vel'] = self._other_vel
+        self._density_program['other_count'] = self._other_count
+        self._density_program['cloud_fade'] = self._cloud_fade
+
         ctx.enable(_GL_PROGRAM_POINT_SIZE)
         saved_blend = ctx.blend_func
+
+        with fbo.activate():
+            fbo.clear(color=(0, 0, 0, 0))
+            ctx.enable(ctx.BLEND)
+            ctx.blend_func = ctx.ONE, ctx.ONE   # additive — overlapping particles sum
+            self._geometry.render(self._density_program, mode=ctx.POINTS, vertices=self._render_count)
+        # fbo.activate() restores whichever framebuffer was bound before this call.
+
         ctx.enable(ctx.BLEND)
         ctx.blend_func = ctx.BLEND_DEFAULT
-        self._geometry.render(self._program, mode=ctx.POINTS, vertices=self._render_count)
+        fbo.color_attachments[0].use(0)
+        self._composite_program['density_tex'] = 0
+        self._composite_program['texel_size'] = (1.0 / width, 1.0 / height)
+        self._composite_quad.render(self._composite_program)
         ctx.blend_func = saved_blend
 
     # ── Internal helpers ────────────────────────────────────────────────────
+
+    def _ensure_density_fbo(self, width: int, height: int) -> Framebuffer:
+        if self._density_fbo is None or self._fbo_size != (width, height):
+            ctx = arcade.get_window().ctx
+            if self._density_fbo is not None:
+                self._density_fbo.delete()
+            texture = ctx.texture(
+                (width, height),
+                components=4,
+                filter=(ctx.LINEAR, ctx.LINEAR),
+                wrap_x=ctx.CLAMP_TO_EDGE,
+                wrap_y=ctx.CLAMP_TO_EDGE,
+            )
+            self._density_fbo = ctx.framebuffer(color_attachments=[texture])
+            self._fbo_size = (width, height)
+        return self._density_fbo
 
     def _spawn_particles(
         self, cx: float, cy: float, disc_radius: float, slot: int,
@@ -288,7 +338,7 @@ class SmokeCloudSystem:
         return buf
 
     def _try_init(self) -> bool:
-        """Load the smoke shader and allocate GPU resources.
+        """Load the smoke shaders and allocate GPU resources.
 
         Returns False on any failure so the effect degrades gracefully.
         """
@@ -296,8 +346,10 @@ class SmokeCloudSystem:
             vert_src = (_SHADER_DIR / 'smoke_particles.vert').read_text()
             vert_src = vert_src.replace('__MAX_PLAYERS__', str(_MAX_PLAYERS))
             vert_src = vert_src.replace('__MAX_CLOUDS__', str(_MAX_CLOUDS))
-            frag_src = (_SHADER_DIR / 'smoke_particles.frag').read_text()
-            self._program = ctx.program(vertex_shader=vert_src, fragment_shader=frag_src)
+            density_frag_src = (_SHADER_DIR / 'smoke_density.frag').read_text()
+            self._density_program = ctx.program(
+                vertex_shader=vert_src, fragment_shader=density_frag_src,
+            )
             self._vbo = ctx.buffer(reserve=_MAX_PARTICLES * _BYTES_PER_PARTICLE, usage='dynamic')
             self._geometry = ctx.geometry([
                 BufferDescription(
@@ -309,6 +361,14 @@ class SmokeCloudSystem:
                     ],
                 )
             ])
+
+            composite_vert_src = (_SHADER_DIR / 'smoke_composite.vert').read_text()
+            composite_frag_src = (_SHADER_DIR / 'smoke_composite.frag').read_text()
+            self._composite_program = ctx.program(
+                vertex_shader=composite_vert_src, fragment_shader=composite_frag_src,
+            )
+            self._composite_quad = quad_2d_fs()
+
             ctx.enable(_GL_PROGRAM_POINT_SIZE)
 
         return try_init_shader_effect(
