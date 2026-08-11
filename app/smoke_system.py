@@ -71,7 +71,7 @@ _DENSITY_PER_TILE = 64         # particles per grid cell of a cloud's area
 _MAX_PARTICLES_PER_CLOUD = 48000
 _ORBIT_FRACTION = 0.55
 
-_SIZE_MIN, _SIZE_MAX = 11.0, 20.0
+_SIZE_MIN, _SIZE_MAX = 11.0, 32.0
 _LIFE_MIN, _LIFE_MAX = 1.4, 2.8    # seconds per turnover cycle
 
 _ORBIT_RADIUS_MIN, _ORBIT_RADIUS_MAX = 6.0, 20.0
@@ -87,7 +87,7 @@ _WIND_FREQ_MIN, _WIND_FREQ_MAX = 0.15, 0.5       # rad/s, slow ambient wander
 # but laggier.
 _PLAYER_SMOOTH_RATE = 12.0
 
-_HOLD_OPACITY = 0.99
+_PEAK_OPACITY = 0.97
 
 
 def _random_point_in_disc(cx: float, cy: float, radius: float) -> tuple[float, float]:
@@ -210,8 +210,8 @@ class SmokeCloudSystem:
         for key, slot in self._slot_of.items():
             fade_ratio = self._fade[key]
             fade_array[slot] = (
-                _HOLD_OPACITY if fade_ratio < 0.5
-                else _HOLD_OPACITY * (1.0 - (fade_ratio - 0.5) * 2.0)
+                _PEAK_OPACITY if fade_ratio < 0.5
+                else _PEAK_OPACITY * (1.0 - (fade_ratio - 0.5) * 2.0)
             )
         self._cloud_fade = tuple(fade_array)
 
@@ -302,6 +302,7 @@ class SmokeCloudSystem:
         fbo.color_attachments[0].use(0)
         self._composite_program['density_tex'] = 0
         self._composite_program['texel_size'] = (1.0 / width, 1.0 / height)
+        self._composite_program['peak_opacity'] = _PEAK_OPACITY
         self._composite_quad.render(self._composite_program)
         ctx.blend_func = saved_blend
 

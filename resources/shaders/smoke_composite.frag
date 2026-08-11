@@ -10,6 +10,7 @@
 // position or silhouette.
 uniform sampler2D density_tex;
 uniform vec2 texel_size;   // 1/width, 1/height of density_tex
+uniform float peak_opacity;   // ceiling alpha even where density is fully saturated
 
 in vec2 v_uv;
 out vec4 out_colour;
@@ -60,5 +61,5 @@ void main() {
     float outline_amount = smoothstep(0.55, 0.75, edge_strength) * shadow_side;
     colour = mix(colour, OUTLINE_COLOUR, outline_amount);
 
-    out_colour = vec4(colour, inside);
+    out_colour = vec4(colour, inside * peak_opacity);
 }
