@@ -93,11 +93,12 @@ def apply_new_bombs(
             # flags — they remain queued for this player's next placement.
             # Smoke has no real blast, so blast_radius here is repurposed
             # as the cloud's radius: blast power + bomb capacity combined,
-            # so both stats grow the smoke coverage.
+            # so both stats grow the smoke coverage. Halved from that combined
+            # value to keep the smoke cloud smaller than a real blast.
             bomb = BombComponent(
                 owner_id=pid,
                 fuse_ticks_remaining=BOMB_FUSE_TICKS,
-                blast_radius=stats.blast_radius + stats.bomb_capacity,
+                blast_radius=max(1, round((stats.blast_radius + stats.bomb_capacity) / 2)),
                 col=col, row=row,
                 px=px, py=py,
                 is_smoke=True,

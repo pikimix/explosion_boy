@@ -78,8 +78,8 @@ def test_smoke_bomb_radius_combines_power_and_capacity() -> None:
 
     _place(state, space, pid=0)
 
-    # _add_player defaults bomb_capacity to 2.
-    assert state.bombs[0].blast_radius == 3 + 2
+    # _add_player defaults bomb_capacity to 2; combined radius is halved.
+    assert state.bombs[0].blast_radius == round((3 + 2) / 2)
 
 
 def test_normal_flags_still_combine_without_smoke_pending() -> None:
