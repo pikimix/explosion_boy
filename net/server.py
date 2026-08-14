@@ -5,6 +5,7 @@ Run via: python run_server.py
 """
 from __future__ import annotations
 
+import random
 import time
 from datetime import datetime
 from uuid import UUID
@@ -95,6 +96,7 @@ class GameServer:
         # Rollback state
         self._snapshots: dict[TickNumber, bytes] = {}
         self._input_log: dict[TickNumber, list[PlayerInput]] = {}
+        self._rng_snapshots: dict[TickNumber, tuple] = {}
 
         self._last_alive_pids: set[int] = set()
         self._last_2_spawn_tick: int = 0
@@ -244,6 +246,7 @@ class GameServer:
         self._clock.reset()
         self._snapshots.clear()
         self._input_log.clear()
+        self._rng_snapshots.clear()
         self._lobby.broadcast_game_start(state)
         print(f"[{_ts()}] Game started with {len(state.players)} players.")
 
@@ -263,6 +266,10 @@ class GameServer:
         inputs = self._input_buffer.drain(tick, debug=self._debug)
 
         self._input_log[tick] = inputs
+        # Capture the RNG state as it stands entering this tick, so a later
+        # rollback replay of this same tick can restore it and reproduce
+        # identical random draws (e.g. powerup drop rolls).
+        self._rng_snapshots[tick] = random.getstate()
         self._run_tick(tick, inputs)
 
         if self._state is None:
@@ -278,6 +285,7 @@ class GameServer:
         evict = tick - self._rollback_buffer_size
         self._snapshots.pop(evict, None)
         self._input_log.pop(evict, None)
+        self._rng_snapshots.pop(evict, None)
 
         self._broadcast_state(state_bytes, tick, CHANNEL_UNRELIABLE)
 
@@ -373,6 +381,13 @@ class GameServer:
                 ]
                 if not any(p.player_id == late_inp.player_id for p in inputs):
                     inputs.append(late_inp)
+
+            # Restore the RNG to the state it was in when this tick originally
+            # ran, so random draws (e.g. powerup drop rolls) come out the same
+            # way this time and don't diverge from what clients already saw.
+            saved_rng = self._rng_snapshots.get(t)
+            if saved_rng is not None:
+                random.setstate(saved_rng)
 
             self._run_tick(t, inputs)
 
@@ -471,5 +486,6 @@ class GameServer:
         self._initial_soft_blocks = 0
         self._snapshots.clear()
         self._input_log.clear()
+        self._rng_snapshots.clear()
         self._lobby.reset()
         print(f"[{_ts()}] Server reset. Waiting for players…")
