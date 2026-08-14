@@ -1,9 +1,11 @@
 """Tests for GameServer's connection handling."""
 
+import random
 from uuid import uuid4
 
-from core.components import Cell, TileKind
+from core.components import Cell, GamePhase, PlayerInput, TileKind
 from core.state import GameState
+from engine.physics import PhysicsSpace
 from net.protocol import JoinMsg, PROTOCOL_VERSION, RejectMsg, decode_any
 from net.server import GameServer
 
@@ -63,3 +65,46 @@ def test_rebuild_space_from_state_reuses_space_when_tiles_unchanged(fake_server_
 
     assert space2 is space1
     assert space2._static_shapes[Cell(1, 0)] is wall_shape
+
+
+def test_replay_restores_rng_state_so_replayed_tick_draws_match_original(
+    fake_server_transport, monkeypatch
+):
+    """Regression: a rollback replay used to re-run a tick's game logic
+    against whatever cursor position Python's shared `random` module
+    happened to be at by the time the replay fired — not the cursor position
+    that tick actually saw live. This let random-chance outcomes (e.g. a
+    powerup drop roll on soft-block destruction) diverge between the live
+    broadcast and the replayed broadcast, silently un-spawning a powerup the
+    client had already seen with no pickup ever occurring. Restoring the RNG
+    state captured entering each tick before replaying it must make every
+    replayed tick draw identically to the original."""
+    server = GameServer(fake_server_transport)
+    server._state = GameState(
+        tick=0, map_cols=1, map_rows=1, tiles=[[TileKind.EMPTY]], phase=GamePhase.PLAYING
+    )
+    server._space = PhysicsSpace()
+    server._space.rebuild_static_walls(server._state.tiles)
+    server._clock.reset()
+
+    draws: list[tuple] = []
+
+    def fake_run_tick(tick, inputs):
+        draws.append((tick, random.random()))
+
+    monkeypatch.setattr(server, "_run_tick", fake_run_tick)
+
+    random.seed(12345)
+    for _ in range(5):
+        server._tick()
+
+    assert [t for t, _ in draws] == [1, 2, 3, 4, 5]
+    original = dict(draws)
+
+    late_inp = PlayerInput(player_id=0, tick=3, move_x=0.0, move_y=0.0, place_bomb=False)
+    server._replay_from(3, late_inp)
+
+    replayed = draws[5:]
+    assert [t for t, _ in replayed] == [3, 4, 5]
+    for tick, value in replayed:
+        assert value == original[tick]
